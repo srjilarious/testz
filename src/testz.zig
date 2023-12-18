@@ -119,17 +119,6 @@ pub const TestContext = struct {
 
     fn expectEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
         if(expected != actual) {
-            // var fail: TestFailure = .{
-            //     .lineNo = 123,
-            //     .errorMessage = undefined,
-            //     // .stackTrace = undefined,
-            // };
-
-            // Allow a stacktrace to be up to 512kb.
-            // fail.stackTrace = self.alloc.alloc(u8, 1024*512);
-
-            // fail.errorMessage = "";
-
             // Print the test failed.
             std.debug.print(Red ++ "X" ++ Reset ++ "\n\n", .{});
 
@@ -144,13 +133,6 @@ pub const TestContext = struct {
 
             std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " == " ++ White ++ "{}" ++ Reset ++ "\n", 
                 .{expected, actual});
-
-            // self.failures.append(fail) catch {
-            //     @panic("Unable to Append, OOM.");
-            // };
-            // 
-            // std.debug.dumpCurrentStackTrace(null);
-            
 
             printStackTrace() catch {
                 // std.debug.print("Unable to print stack trace: {}", .{err});
@@ -267,8 +249,6 @@ fn printLinesFromFileAnyOs(out_stream: anytype, line_info: std.debug.LineInfo, c
     const min_line: u64 = line_info.line -| context_amount;
     const max_line: u64 = line_info.line +| context_amount;
 
-    // std.debug.print("Printing lines: {} to {}, in '{s}'\n", .{ min_line, max_line, line_info.file_name });
-
     var buf: [std.mem.page_size]u8 = undefined;
     var line: usize = 1;
     var column: usize = 1;
@@ -349,7 +329,6 @@ fn printStackTrace() !void {
         };
         defer symbol_info.deinit(debug_info.allocator);
 
-        // std.debug.print(">>> {s}\n", .{symbol_info.symbol_name});
         if (std.mem.eql(u8, symbol_info.symbol_name, "posixCallMainAndExit"))
             break;
 
@@ -357,7 +336,6 @@ fn printStackTrace() !void {
         if (line_info) |*li| {
             
             // Skip printing frames within the framework.
-               //swapfile//std.mem.startsWith(u6, symbol_info.symbol_name, "expectEqual") and 
             if(std.mem.endsWith(u8, li.file_name, "testz.zig")) continue;
 
             try stderr.print("\n{s}:" ++ White ++ "{d}" ++ Reset ++ ":{d}:\n", .{ li.file_name, li.line, li.column });
