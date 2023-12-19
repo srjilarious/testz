@@ -1,5 +1,5 @@
 const std = @import("std");
-const testz = @import("testz.zig");
+const testz = @import("testz");
 
 fn myTest() !void {
     try testz.expectEqual(true, false);
