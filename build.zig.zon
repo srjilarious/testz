@@ -1,6 +1,6 @@
 .{
     .name = "testz",
     .version = "0.2.0",
-    .paths = .{ "src/tests.zig" },
+    .paths = .{ "build.zig, "src/testz.zig" },
     .dependencies = .{},
 }
