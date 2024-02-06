@@ -13,7 +13,7 @@ const White = "\x1b[97m";
 
 const Reset = "\x1b[0m";
 
-pub const TestFunc = *const fn () error{TestExpectedEqual}!void;
+pub const TestFunc = *const fn () anyerror!void;
 pub const TestFuncInfo = struct { 
     func: TestFunc, 
     name: []const u8,

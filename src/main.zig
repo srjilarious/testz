@@ -2,6 +2,8 @@ const std = @import("std");
 const testz = @import("testz");
 
 fn myTest() !void {
+    const mem = try std.heap.page_allocator.alloc(u8, 10);
+    defer std.heap.page_allocator.free(mem);
     try testz.expectEqual(true, false);
 }
 
