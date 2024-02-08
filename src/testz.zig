@@ -117,6 +117,32 @@ pub const TestContext = struct {
         self.currTestName = name;
     }
 
+    fn expectTrue(self: *TestContext, actual: anytype) !void {
+        if(actual != true) {
+            // Print the test failed.
+            std.debug.print(Red ++ "X" ++ Reset ++ "\n\n", .{});
+
+            if(self.verbose) {
+                // If verbose, we don't need to print the test name in the fail message
+                // since it will already show up in the list of tests running.
+                std.debug.print(Red ++ "FAIL" ++ Reset ++ ": ", .{});
+            }
+            else {
+                std.debug.print(Red ++ "FAIL " ++ Yellow ++ "{?s}" ++ Reset ++ ": ", .{self.currTestName});
+            }
+
+            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be true " ++ Reset ++ "\n", 
+                .{actual});
+
+            printStackTrace() catch {
+                // std.debug.print("Unable to print stack trace: {}", .{err});
+            };
+
+            std.debug.print("\n", .{});
+            return error.TestExpectedTrue;
+        }
+    }
+
     fn expectEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
         if(expected != actual) {
             // Print the test failed.
@@ -145,6 +171,10 @@ pub const TestContext = struct {
 };
 
 var GlobalTestContext: ?TestContext = null;//TestContext.init();
+
+pub fn expectTrue(actual: anytype) !void {
+    try GlobalTestContext.?.expectTrue(actual);
+}
 
 pub fn expectEqual(expected: anytype, actual: anytype) !void {
     try GlobalTestContext.?.expectEqual(expected, actual);
