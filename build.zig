@@ -16,7 +16,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const module = b.addModule("testz", .{
-        .source_file = .{ .path = "src/testz.zig" },
+        .root_source_file = .{ .path = "src/testz.zig" },
     });
 
     const exe = b.addExecutable(.{
@@ -27,7 +27,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    exe.addModule("testz", module);
+    exe.root_module.addImport("testz", module);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
