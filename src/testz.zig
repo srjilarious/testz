@@ -272,7 +272,7 @@ pub fn runTests(tests: []const TestFuncInfo, verbose: bool) bool {
 fn printLinesFromFileAnyOs(out_stream: anytype, line_info: std.debug.LineInfo, context_amount: u64) !void {
     // Need this to always block even in async I/O mode, because this could potentially
     // be called from e.g. the event loop code crashing.
-    var f = try std.fs.cwd().openFile(line_info.file_name, .{ .intended_io_mode = .blocking });
+    var f = try std.fs.cwd().openFile(line_info.file_name, .{});
     defer f.close();
     // TODO fstat and make sure that the file has the correct size
 
