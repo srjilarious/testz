@@ -213,9 +213,14 @@ pub fn runTests(tests: []const TestFuncInfo, verbose: bool) bool {
 
         GlobalTestContext.?.setCurrentTest(testPrintName);
         if (verbose) {
-            std.debug.print("\nRunning " ++ "{s}{s}" ++ Reset ++ "...", .{
-                if(f.skip) DarkGray else White,
-                testPrintName});
+            if(f.skip) {
+                std.debug.print("\nSkipping " ++ DarkGray ++ "{s}" ++ Reset ++ "...", 
+                    .{testPrintName});
+            }
+            else {
+                std.debug.print("\n Running " ++ White ++ "{s}" ++ Reset ++ "...", 
+                    .{testPrintName});
+            }
             var num = @min(verboseLength - testPrintName.len, 128);
             while (num > 0) {
                 std.debug.print(".", .{});
@@ -229,8 +234,13 @@ pub fn runTests(tests: []const TestFuncInfo, verbose: bool) bool {
             continue;
         }
 
-        const res = f.func();
-        if (res != error.TestExpectedEqual) {
+        var errorCaught = false;
+        f.func() catch {
+            errorCaught = true;
+            testsFailed += 1;
+        };
+
+        if(!errorCaught) {
             testsPassed += 1;
 
             if (verbose) {
@@ -238,10 +248,7 @@ pub fn runTests(tests: []const TestFuncInfo, verbose: bool) bool {
             } else {
                 std.debug.print(Green ++ "." ++ Reset, .{});
             }
-        } else {
-            testsFailed += 1;
-            // std.debug.print(Red ++ "X" ++ Reset, .{});
-        }
+        }  
     }
 
     //std.debug.print(Green ++ "\nDone!\n\n" ++ Reset, .{});
