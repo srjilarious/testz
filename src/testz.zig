@@ -117,55 +117,67 @@ pub const TestContext = struct {
         self.currTestName = name;
     }
 
+    fn printErrorBegin(self: *TestContext) void {
+        // Print the test failed.
+        std.debug.print(Red ++ "X" ++ Reset ++ "\n\n", .{});
+
+        if(self.verbose) {
+            // If verbose, we don't need to print the test name in the fail message
+            // since it will already show up in the list of tests running.
+            std.debug.print(Red ++ "FAIL" ++ Reset ++ ": ", .{});
+        }
+        else {
+            std.debug.print(Red ++ "FAIL " ++ Yellow ++ "{?s}" ++ Reset ++ ": ", .{self.currTestName});
+        }
+    }
+
+        
+    fn printErrorEnd(self: *TestContext) void {
+        _ = self;
+        printStackTrace() catch {
+            // std.debug.print("Unable to print stack trace: {}", .{err});
+        };
+
+        std.debug.print("\n", .{});
+    }
+
     fn expectTrue(self: *TestContext, actual: anytype) !void {
         if(actual != true) {
-            // Print the test failed.
-            std.debug.print(Red ++ "X" ++ Reset ++ "\n\n", .{});
-
-            if(self.verbose) {
-                // If verbose, we don't need to print the test name in the fail message
-                // since it will already show up in the list of tests running.
-                std.debug.print(Red ++ "FAIL" ++ Reset ++ ": ", .{});
-            }
-            else {
-                std.debug.print(Red ++ "FAIL " ++ Yellow ++ "{?s}" ++ Reset ++ ": ", .{self.currTestName});
-            }
-
-            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be true " ++ Reset ++ "\n", 
-                .{actual});
-
-            printStackTrace() catch {
-                // std.debug.print("Unable to print stack trace: {}", .{err});
-            };
-
-            std.debug.print("\n", .{});
+            self.printErrorBegin();
+            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be true" ++ Reset ++ "\n", 
+            .{actual});
+            self.printErrorEnd();
             return error.TestExpectedTrue;
+        }
+    }
+
+    fn expectFalse(self: *TestContext, actual: anytype) !void {
+        if(actual == true) {
+            self.printErrorBegin();
+            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be false " ++ Reset ++ "\n", 
+            .{actual});
+            self.printErrorEnd();
+            return error.TestExpectedFalse;
         }
     }
 
     fn expectEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
         if(expected != actual) {
-            // Print the test failed.
-            std.debug.print(Red ++ "X" ++ Reset ++ "\n\n", .{});
-
-            if(self.verbose) {
-                // If verbose, we don't need to print the test name in the fail message
-                // since it will already show up in the list of tests running.
-                std.debug.print(Red ++ "FAIL" ++ Reset ++ ": ", .{});
-            }
-            else {
-                std.debug.print(Red ++ "FAIL " ++ Yellow ++ "{?s}" ++ Reset ++ ": ", .{self.currTestName});
-            }
-
-            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " == " ++ White ++ "{}" ++ Reset ++ "\n", 
-                .{expected, actual});
-
-            printStackTrace() catch {
-                // std.debug.print("Unable to print stack trace: {}", .{err});
-            };
-
-            std.debug.print("\n", .{});
+            self.printErrorBegin();
+            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be {} " ++ Reset ++ "\n", 
+            .{actual, expected});
+            self.printErrorEnd();
             return error.TestExpectedEqual;
+        }
+    }
+    
+    fn expectNotEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
+        if(expected == actual) {
+           self.printErrorBegin();
+            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to NOT be {} " ++ Reset ++ "\n", 
+            .{actual, expected});
+            self.printErrorEnd(); 
+            return error.TestExpectedNotEqual;
         }
     }
 };
@@ -176,8 +188,16 @@ pub fn expectTrue(actual: anytype) !void {
     try GlobalTestContext.?.expectTrue(actual);
 }
 
+pub fn expectFalse(actual: anytype) !void {
+    try GlobalTestContext.?.expectFalse(actual);
+}
+
 pub fn expectEqual(expected: anytype, actual: anytype) !void {
     try GlobalTestContext.?.expectEqual(expected, actual);
+}
+
+pub fn expectNotEqual(expected: anytype, actual: anytype) !void {
+    try GlobalTestContext.?.expectNotEqual(expected, actual);
 }
 
 pub fn runTests(tests: []const TestFuncInfo, verbose: bool) bool {
