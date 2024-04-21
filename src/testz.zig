@@ -20,30 +20,28 @@ pub const TestFuncInfo = struct {
     skip: bool
 };
 
-pub fn discoverTestsInModule(comptime mod: type) []TestFuncInfo {
+pub fn discoverTestsInModule(comptime mod: type) []const TestFuncInfo {
 
-    // @compileLog(@typeInfo(andTests).Struct.decls);
-    var numTests: usize = 0;
-    for (std.meta.declarations(mod)) |decl| {
+    comptime var numTests: usize = 0;
+    const decls = @typeInfo(mod).Struct.decls;
+    inline for (decls) |decl| {
         const fld = @field(mod, decl.name);
         const ti = @typeInfo(@TypeOf(fld));
         if (ti == .Fn) {
             if (std.mem.endsWith(u8, decl.name, "Test")) {
                 numTests += 1;
-                // @compileLog("Found TEST: ", numTests);
             }
         }
     }
 
     comptime var tests: [numTests]TestFuncInfo = undefined;
-    var idx: usize = 0;
-    for (std.meta.declarations(mod)) |decl| {
+    comptime var idx: usize = 0;
+    inline for (decls) |decl| {
         const fld = @field(mod, decl.name);
         const ti = @typeInfo(@TypeOf(fld));
         if (ti == .Fn) {
             if (std.mem.endsWith(u8, decl.name, "Test")) {
                 const skip = std.mem.startsWith(u8, decl.name, "skip_");
-                // @compileLog("Adding TEST: " ++ decl.name);
                 tests[idx] = .{ 
                     .func = fld, 
                     .name = decl.name,
@@ -54,11 +52,11 @@ pub fn discoverTestsInModule(comptime mod: type) []TestFuncInfo {
         }
     }
 
-    return &tests;
-    // @compileLog(tests);
+    const final = tests;
+    return &final;
 }
 
-pub fn discoverTests(comptime mods: anytype) []TestFuncInfo {
+pub fn discoverTests(comptime mods: anytype) []const TestFuncInfo {
     const ModsType = @TypeOf(mods);
     const modsTypeInfo = @typeInfo(ModsType);
     if (modsTypeInfo != .Struct) {
@@ -69,7 +67,7 @@ pub fn discoverTests(comptime mods: anytype) []TestFuncInfo {
     const MaxTests = 10000;
     comptime var tests: [MaxTests]TestFuncInfo = undefined;
     comptime var totalTests: usize = 0;
-    var fieldIdx = 0;
+    comptime var fieldIdx = 0;
     inline for (fieldsInfo) |_| {
         const fieldName = std.fmt.comptimePrint("{}", .{fieldIdx});
         fieldIdx += 1;
@@ -81,7 +79,8 @@ pub fn discoverTests(comptime mods: anytype) []TestFuncInfo {
         }
     }
 
-    return tests[0..totalTests];
+    const final: [totalTests]TestFuncInfo = tests[0..totalTests].*;
+    return &final;
 }
 
 pub const TestFailure = struct { 
