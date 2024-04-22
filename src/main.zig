@@ -23,6 +23,10 @@ fn failTest_expectFalse() !void {
     try testz.expectFalse(true);
 }
 
+fn failTest_alwaysFail() !void {
+    try testz.fail();
+}
+
 fn successTest() !void {
     try testz.expectEqual(true, true);
     try testz.expectNotEqual(10, 20);
@@ -43,5 +47,6 @@ pub fn main() !void {
         .{ .func = failTest_expectNotEqual, .name = "failTest_expectNotEqual", .skip = false },
         .{ .func = failTest_expectTrue, .name = "failTest_expectTrue", .skip = false },
         .{ .func = failTest_expectFalse, .name = "failTest_expectFalse", .skip = false },
+        .{ .func = failTest_alwaysFail, .name = "failTest_alwaysFail", .skip = false },
     }, true);
 }

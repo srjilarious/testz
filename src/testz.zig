@@ -106,8 +106,8 @@ pub const TestContext = struct {
     }
 
     fn deinit(self: *TestContext) void {
-        for(self.failures) |fail| {
-            self.alloc.free(fail.errorMessage);
+        for(self.failures) |f| {
+            self.alloc.free(f.errorMessage);
         }
         self.alloc.free(self.failures);
     }
@@ -138,6 +138,13 @@ pub const TestContext = struct {
         };
 
         std.debug.print("\n", .{});
+    }
+
+    fn fail(self: *TestContext) !void {
+        self.printErrorBegin();
+        std.debug.print("Test hit failure point.\n", .{});
+        self.printErrorEnd();
+        return error.TestFailed;
     }
 
     fn expectTrue(self: *TestContext, actual: anytype) !void {
@@ -182,6 +189,10 @@ pub const TestContext = struct {
 };
 
 var GlobalTestContext: ?TestContext = null;//TestContext.init();
+
+pub fn fail() !void {
+    try GlobalTestContext.?.fail();
+}
 
 pub fn expectTrue(actual: anytype) !void {
     try GlobalTestContext.?.expectTrue(actual);
@@ -233,11 +244,11 @@ pub fn runTests(tests: []const TestFuncInfo, verbose: bool) bool {
         GlobalTestContext.?.setCurrentTest(testPrintName);
         if (verbose) {
             if(f.skip) {
-                std.debug.print("\nSkipping " ++ DarkGray ++ "{s}" ++ Reset ++ "...", 
+                std.debug.print("\nSkipping " ++ DarkGray ++ "{s}" ++ Reset ++ "..", 
                     .{testPrintName});
             }
             else {
-                std.debug.print("\n Running " ++ White ++ "{s}" ++ Reset ++ "...", 
+                std.debug.print("\nRunning " ++ White ++ "{s}" ++ Reset ++ "...", 
                     .{testPrintName});
             }
             var num = @min(verboseLength - testPrintName.len, 128);
