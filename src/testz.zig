@@ -168,12 +168,23 @@ pub const TestContext = struct {
     }
 
     fn expectEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
-        if(expected != actual) {
-            self.printErrorBegin();
-            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be {} " ++ Reset ++ "\n", 
-            .{actual, expected});
-            self.printErrorEnd();
-            return error.TestExpectedEqual;
+        if(@TypeOf(expected) == []const u8) {
+            if(std.mem.eql(u8, expected, actual) == false) {
+                self.printErrorBegin();
+                std.debug.print("Expected " ++ White ++ "{s}" ++ Reset ++ " to be {s} " ++ Reset ++ "\n", 
+                .{actual, expected});
+                self.printErrorEnd();
+                return error.TestExpectedEqual;
+            }
+        }
+        else {
+            if(expected != actual) {
+                self.printErrorBegin();
+                std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be {} " ++ Reset ++ "\n", 
+                .{actual, expected});
+                self.printErrorEnd();
+                return error.TestExpectedEqual;
+            }
         }
     }
     
