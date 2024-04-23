@@ -20,6 +20,15 @@ pub const TestFuncInfo = struct {
     skip: bool
 };
 
+// pub const TestGroup = struct {
+//     name: ?[]const u8,
+//     tests: []const TestFuncInfo
+// };
+//
+// pub const TestSet = struct {
+//     groups: []const TestGroup
+// };
+
 pub fn discoverTestsInModule(comptime mod: type) []const TestFuncInfo {
 
     comptime var numTests: usize = 0;
@@ -147,7 +156,7 @@ pub const TestContext = struct {
         return error.TestFailed;
     }
 
-    fn expectTrue(self: *TestContext, actual: anytype) !void {
+    fn expectTrue(self: *TestContext, actual: bool) !void {
         if(actual != true) {
             self.printErrorBegin();
             std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be true" ++ Reset ++ "\n", 
@@ -157,7 +166,7 @@ pub const TestContext = struct {
         }
     }
 
-    fn expectFalse(self: *TestContext, actual: anytype) !void {
+    fn expectFalse(self: *TestContext, actual: bool) !void {
         if(actual == true) {
             self.printErrorBegin();
             std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be false " ++ Reset ++ "\n", 
@@ -167,35 +176,74 @@ pub const TestContext = struct {
         }
     }
 
-    fn expectEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
-        if(@TypeOf(expected) == []const u8) {
-            if(std.mem.eql(u8, expected, actual) == false) {
-                self.printErrorBegin();
-                std.debug.print("Expected " ++ White ++ "{s}" ++ Reset ++ " to be {s} " ++ Reset ++ "\n", 
-                .{actual, expected});
-                self.printErrorEnd();
-                return error.TestExpectedEqual;
-            }
-        }
-        else {
-            if(expected != actual) {
-                self.printErrorBegin();
-                std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be {} " ++ Reset ++ "\n", 
-                .{actual, expected});
-                self.printErrorEnd();
-                return error.TestExpectedEqual;
-            }
+    fn expectEqualStr(self: *TestContext, expected: []const u8, actual: []const u8) !void {
+        if(std.mem.eql(u8, expected, actual) == false) {
+            self.printErrorBegin();
+            std.debug.print("Expected " ++ White ++ "{s}" ++ Reset ++ " to be {s} " ++ Reset ++ "\n", 
+            .{actual, expected});
+            self.printErrorEnd();
+            return error.TestExpectedEqual;
         }
     }
     
-    fn expectNotEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
-        if(expected == actual) {
-           self.printErrorBegin();
-            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to NOT be {} " ++ Reset ++ "\n", 
+    fn expectEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
+        if(expected != actual) {
+            self.printErrorBegin();
+            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be {} " ++ Reset ++ "\n", 
             .{actual, expected});
-            self.printErrorEnd(); 
+            self.printErrorEnd();
+            return error.TestExpectedEqual;
+        }
+    }
+    
+    fn expectNotEqualStr(self: *TestContext, expected: []const u8, actual: []const u8) !void {
+        if(std.mem.eql(u8, expected, actual) == true) {
+            self.printErrorBegin();
+            std.debug.print("Expected " ++ White ++ "{s}" ++ Reset ++ " to NOT be {s} " ++ Reset ++ "\n", 
+            .{actual, expected});
+            self.printErrorEnd();
             return error.TestExpectedNotEqual;
         }
+    }
+
+    fn expectNotEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
+        // @compileLog(@typeInfo(@TypeOf(actual)));
+        // switch (@typeInfo(@TypeOf(actual))) {
+        //     .Pointer => |pointer| {
+        //         switch (pointer.size) {
+        //             .One, .Many, .C => {
+        //                 if (actual == expected) {
+        //                     self.printErrorBegin();
+        //                     std.debug.print("expected NOT {*}, found {*}\n", .{ expected, actual });
+        //                     self.printErrorEnd();
+        //                     return error.TestExpectedNotEqual;
+        //                 }
+        //             },
+        //             .Slice => {
+        //                 if(std.mem.eql(pointer.child, expected, actual) == true) {
+        //                     self.printErrorBegin();
+        //                     std.debug.print("Expected " ++ White ++ "{s}" ++ Reset ++ " to NOT be {s} " ++ Reset ++ "\n", 
+        //                     .{actual, expected});
+        //                     self.printErrorEnd();
+        //                     return error.TestExpectedNotEqual;
+        //                 }
+        //                 // if (actual.len != expected.len) {
+        //                 //     print("expected slice len {}, found {}\n", .{ expected.len, actual.len });
+        //                 //     return error.TestExpectedEqual;
+        //                 // }
+        //             },
+        //         }
+        //     },
+        //     else => {
+                if(expected == actual) {
+                   self.printErrorBegin();
+                    std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to NOT be {} " ++ Reset ++ "\n", 
+                    .{actual, expected});
+                    self.printErrorEnd(); 
+                    return error.TestExpectedNotEqual;
+                }
+            // }
+        // }
     }
 };
 
@@ -213,8 +261,16 @@ pub fn expectFalse(actual: anytype) !void {
     try GlobalTestContext.?.expectFalse(actual);
 }
 
+pub fn expectEqualStr(expected: []const u8, actual: []const u8) !void {
+    try GlobalTestContext.?.expectEqualStr(expected, actual);
+}
+
 pub fn expectEqual(expected: anytype, actual: anytype) !void {
     try GlobalTestContext.?.expectEqual(expected, actual);
+}
+
+pub fn expectNotEqualStr(expected: []const u8, actual: []const u8) !void {
+    try GlobalTestContext.?.expectNotEqualStr(expected, actual);
 }
 
 pub fn expectNotEqual(expected: anytype, actual: anytype) !void {

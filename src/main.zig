@@ -15,6 +15,14 @@ fn failTest_expectNotEqual() !void {
     try testz.expectNotEqual(10, 10);
 }
 
+fn failTest_expectEqualStr() !void {
+    // try testz.expectEqual("hello", "world");
+}
+
+fn failTest_expectNotEqualStr() !void {
+    try testz.expectNotEqualStr("hello", "hello");
+}
+
 fn failTest_expectTrue() !void {
     try testz.expectTrue(false);
 }
@@ -28,8 +36,10 @@ fn failTest_alwaysFail() !void {
 }
 
 fn successTest() !void {
-    try testz.expectEqual(true, true);
+    try testz.expectEqual(12, 12);
+    // try testz.expectEqual("hello", "hello");
     try testz.expectNotEqual(10, 20);
+    // try testz.expectNotEqualStr("hello", "world");
     try testz.expectTrue(true);
     try testz.expectFalse(false);
 }
@@ -44,7 +54,9 @@ pub fn main() !void {
         .{ .func = skip_Test, .name = "skip_Test", .skip = true },
         .{ .func = allowNonTestzErrors, .name = "allowNonTestzErrors", .skip = false },
         .{ .func = failTest_expectEqual, .name = "failTest_expectEqual", .skip = false },
+        .{ .func = failTest_expectEqualStr, .name = "failTest_expectEqualStr", .skip = false },
         .{ .func = failTest_expectNotEqual, .name = "failTest_expectNotEqual", .skip = false },
+        .{ .func = failTest_expectNotEqualStr, .name = "failTest_expectNotEqualStr", .skip = false },
         .{ .func = failTest_expectTrue, .name = "failTest_expectTrue", .skip = false },
         .{ .func = failTest_expectFalse, .name = "failTest_expectFalse", .skip = false },
         .{ .func = failTest_alwaysFail, .name = "failTest_alwaysFail", .skip = false },
