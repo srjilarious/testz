@@ -156,6 +156,13 @@ pub const TestContext = struct {
         return error.TestFailed;
     }
 
+    fn failWith(self: *TestContext, err: anytype) !void {
+        self.printErrorBegin();
+        std.debug.print("Test hit failure point: {}\n", .{err});
+        self.printErrorEnd();
+        return error.TestFailed;
+    }
+
     fn expectTrue(self: *TestContext, actual: bool) !void {
         if(actual != true) {
             self.printErrorBegin();
@@ -251,6 +258,10 @@ var GlobalTestContext: ?TestContext = null;//TestContext.init();
 
 pub fn fail() !void {
     try GlobalTestContext.?.fail();
+}
+
+pub fn failWith(err: anytype) !void {
+    try GlobalTestContext.?.failWith(err);
 }
 
 pub fn expectTrue(actual: anytype) !void {
