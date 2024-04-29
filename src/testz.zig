@@ -17,7 +17,8 @@ pub const TestFunc = *const fn () anyerror!void;
 pub const TestFuncInfo = struct { 
     func: TestFunc, 
     name: []const u8,
-    skip: bool
+    skip: bool,
+    group: ?[]const u8
 };
 
 // pub const TestGroup = struct {
@@ -35,7 +36,8 @@ pub const Group = struct {
     mod: type
 };
 
-pub fn discoverTestsInModule(comptime mod: type) []const TestFuncInfo {
+
+pub fn discoverTestsInModule(comptime group: ?[]const u8, comptime mod: type) []const TestFuncInfo {
 
     comptime var numTests: usize = 0;
     const decls = @typeInfo(mod).Struct.decls;
@@ -61,6 +63,7 @@ pub fn discoverTestsInModule(comptime mod: type) []const TestFuncInfo {
                     .func = fld, 
                     .name = decl.name,
                     .skip = skip,
+                    .group = group,
                 };
                 idx += 1;
             }
@@ -99,7 +102,7 @@ pub fn discoverTests(comptime mods: anytype) []const TestFuncInfo {
             break :blk @field(mods, fieldName);
         };
 
-        const modTests = discoverTestsInModule(currMod);
+        const modTests = discoverTestsInModule(currGroupName, currMod);
         for (modTests) |t| {
             tests[totalTests] = t;
             totalTests += 1;
@@ -339,16 +342,16 @@ pub fn runTests(tests: []const TestFuncInfo, verbose: bool) bool {
         testsRun += 1;
 
         const testPrintName = if(f.skip) f.name[5..] else f.name;
-
+        const groupName = if(f.group != null) f.group.? else "";
         GlobalTestContext.?.setCurrentTest(testPrintName);
         if (verbose) {
             if(f.skip) {
-                std.debug.print("\nSkipping " ++ DarkGray ++ "{s}" ++ Reset ++ "..", 
-                    .{testPrintName});
+                std.debug.print("\nSkipping " ++ DarkGray ++ "{s} - {s}" ++ Reset ++ "..", 
+                    .{groupName, testPrintName});
             }
             else {
-                std.debug.print("\nRunning " ++ White ++ "{s}" ++ Reset ++ "...", 
-                    .{testPrintName});
+                std.debug.print("\nRunning " ++ White ++ "{s} - {s}" ++ Reset ++ "...", 
+                    .{groupName, testPrintName});
             }
             var num = @min(verboseLength - testPrintName.len, 128);
             while (num > 0) {
