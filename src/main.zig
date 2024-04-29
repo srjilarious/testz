@@ -48,6 +48,8 @@ fn skip_Test() !void {
     // nothing to see here.
 }
 
+const DiscoveredTests = testz.discoverTests(.{testz.Group{ .name = "test group!", .mod = @import("./group_1.zig") }});
+
 pub fn main() !void {
     _ = testz.runTests(&[_]testz.TestFuncInfo{
         .{ .func = successTest, .name = "successTest", .skip = false },
@@ -61,4 +63,6 @@ pub fn main() !void {
         .{ .func = failTest_expectFalse, .name = "failTest_expectFalse", .skip = false },
         .{ .func = failTest_alwaysFail, .name = "failTest_alwaysFail", .skip = false },
     }, true);
+
+    _ = testz.runTests(DiscoveredTests, true);
 }

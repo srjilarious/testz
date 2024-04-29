@@ -29,6 +29,12 @@ pub const TestFuncInfo = struct {
 //     groups: []const TestGroup
 // };
 
+// Struct for how a module can be passed in and associated as a group.
+pub const Group = struct {
+    name: [] const u8,
+    mod: type
+};
+
 pub fn discoverTestsInModule(comptime mod: type) []const TestFuncInfo {
 
     comptime var numTests: usize = 0;
@@ -66,6 +72,11 @@ pub fn discoverTestsInModule(comptime mod: type) []const TestFuncInfo {
 }
 
 pub fn discoverTests(comptime mods: anytype) []const TestFuncInfo {
+    const MaxTests = 10000;
+    comptime var tests: [MaxTests]TestFuncInfo = undefined;
+    comptime var totalTests: usize = 0;
+    comptime var fieldIdx = 0;
+    comptime var currGroupName: ?[]const u8 = null;
     const ModsType = @TypeOf(mods);
     const modsTypeInfo = @typeInfo(ModsType);
     if (modsTypeInfo != .Struct) {
@@ -73,19 +84,29 @@ pub fn discoverTests(comptime mods: anytype) []const TestFuncInfo {
     }
 
     const fieldsInfo = modsTypeInfo.Struct.fields;
-    const MaxTests = 10000;
-    comptime var tests: [MaxTests]TestFuncInfo = undefined;
-    comptime var totalTests: usize = 0;
-    comptime var fieldIdx = 0;
     inline for (fieldsInfo) |_| {
         const fieldName = std.fmt.comptimePrint("{}", .{fieldIdx});
+        const currIndexItem = @field(mods, fieldName);
         fieldIdx += 1;
-        const currMod = @field(mods, fieldName);
+        const currMod = blk: {
+            if(@TypeOf(currIndexItem) == Group) {
+                
+                currGroupName = @field(currIndexItem, "name");
+                // Grab the mods field from the Group to extract actual tests from.
+                break :blk @field(currIndexItem, "mod");
+            }
+            
+            break :blk @field(mods, fieldName);
+        };
+
         const modTests = discoverTestsInModule(currMod);
         for (modTests) |t| {
             tests[totalTests] = t;
             totalTests += 1;
         }
+
+        // Reset the group name
+        currGroupName = null;
     }
 
     const final: [totalTests]TestFuncInfo = tests[0..totalTests].*;
@@ -372,10 +393,6 @@ pub fn runTests(tests: []const TestFuncInfo, verbose: bool) bool {
     });
 
 
-    // Testing
-    // for(GlobalTestContext.?.failures.items) |fail| {
-    //     std.debug.print("{s}\n", .{fail.errorMessage});
-    // }
     return testsFailed == 0;
 }
 
