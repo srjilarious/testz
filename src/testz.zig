@@ -312,8 +312,27 @@ pub fn expectNotEqual(expected: anytype, actual: anytype) !void {
     try GlobalTestContext.?.expectNotEqual(expected, actual);
 }
 
-pub fn runTests(tests: []const TestFuncInfo, verbose: bool) bool {
-    GlobalTestContext = TestContext.init(std.heap.page_allocator, verbose);
+const TestFuncList = std.ArrayList(TestFuncInfo);
+const TestFuncMap = std.StringHashMap(TestFuncList);
+
+pub fn runTests(tests: []const TestFuncInfo, verbose: bool) !bool {
+    const alloc = std.heap.page_allocator;
+    GlobalTestContext = TestContext.init(alloc, verbose);
+
+    var groupMap = TestFuncMap.init(alloc);
+    defer groupMap.deinit();
+
+    for(tests) |t| {
+        const groupName = if(t.group != null) t.group.? else "";
+        if(!groupMap.contains(groupName)) {
+            const list = TestFuncList.init(alloc);
+            try groupMap.put(groupName, list);
+
+        }
+
+        var list = groupMap.getPtr(groupName).?;
+        try list.append(t);
+    }
 
     if (verbose) {
         std.debug.print("\nRunning {} tests:\n", .{tests.len});
@@ -338,49 +357,66 @@ pub fn runTests(tests: []const TestFuncInfo, verbose: bool) bool {
     }
 
     // Run each of the tests.
-    for (tests) |f| {
-        testsRun += 1;
+    var groupIterator = groupMap.keyIterator();
+    //for (tests) |f| {
+    while(true) {
+        const groupName = groupIterator.next();
+        if(groupName == null) break;
 
-        const testPrintName = if(f.skip) f.name[5..] else f.name;
-        const groupName = if(f.group != null) f.group.? else "";
-        GlobalTestContext.?.setCurrentTest(testPrintName);
-        if (verbose) {
-            if(f.skip) {
-                std.debug.print("\nSkipping " ++ DarkGray ++ "{s} - {s}" ++ Reset ++ "..", 
-                    .{groupName, testPrintName});
-            }
-            else {
-                std.debug.print("\nRunning " ++ White ++ "{s} - {s}" ++ Reset ++ "...", 
-                    .{groupName, testPrintName});
-            }
-            var num = @min(verboseLength - testPrintName.len, 128);
-            while (num > 0) {
-                std.debug.print(".", .{});
-                num -= 1;
-            }
+        const testList = groupMap.get(groupName.?.*).?;
+
+        if(groupName.?.len > 0) {
+            std.debug.print("# {s}\n", .{groupName.?.*});
         }
 
-        if(f.skip) {
-            std.debug.print(Yellow ++ "\u{21b7}" ++ Reset, .{});
-            testsSkipped += 1;
-            continue;
-        }
+        for(testList.items) |f| {
+            testsRun += 1;
 
-        var errorCaught = false;
-        f.func() catch {
-            errorCaught = true;
-            testsFailed += 1;
-        };
-
-        if(!errorCaught) {
-            testsPassed += 1;
-
+            const testPrintName = if(f.skip) f.name[5..] else f.name;
+            
+            GlobalTestContext.?.setCurrentTest(testPrintName);
             if (verbose) {
-                std.debug.print(Green ++ "\u{2713}" ++ Reset, .{});
-            } else {
-                std.debug.print(Green ++ "." ++ Reset, .{});
+                if(f.skip) {
+                    std.debug.print("\nSkipping " ++ DarkGray ++ "{s}" ++ Reset ++ "..", 
+                        .{testPrintName});
+                }
+                else {
+                    std.debug.print("\nRunning " ++ White ++ "{s}" ++ Reset ++ "...", 
+                        .{testPrintName});
+                }
+                var num = @min(verboseLength - testPrintName.len, 128);
+                while (num > 0) {
+                    std.debug.print(".", .{});
+                    num -= 1;
+                }
             }
-        }  
+
+            if(f.skip) {
+                std.debug.print(Yellow ++ "\u{21b7}" ++ Reset, .{});
+                testsSkipped += 1;
+                continue;
+            }
+
+            var errorCaught = false;
+            f.func() catch {
+                errorCaught = true;
+                testsFailed += 1;
+            };
+
+            if(!errorCaught) {
+                testsPassed += 1;
+
+                if (verbose) {
+                    std.debug.print(Green ++ "\u{2713}" ++ Reset, .{});
+                } else {
+                    std.debug.print(Green ++ "." ++ Reset, .{});
+                }
+            }
+        }
+
+        if(groupName.?.len > 0) {
+            std.debug.print("\n\n", .{});
+        }
     }
 
     //std.debug.print(Green ++ "\nDone!\n\n" ++ Reset, .{});

@@ -8,5 +8,5 @@ const DiscoveredTests = testz.discoverTests(.{
 });
 
 pub fn main() !void {
-    _ = testz.runTests(DiscoveredTests, true);
+    _ = try testz.runTests(DiscoveredTests, true);
 }
