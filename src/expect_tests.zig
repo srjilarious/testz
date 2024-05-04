@@ -10,7 +10,7 @@ pub fn expectNotEqualFailTest() !void {
 }
 
 pub fn expectEqualStrFailTest() !void {
-    // try testz.expectEqual("hello", "world");
+    try testz.expectEqualStr("hello", "world");
 }
 
 pub fn expectNotEqualStrFailTest() !void {

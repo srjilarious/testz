@@ -5,6 +5,7 @@ const native_os = builtin.os.tag;
 
 const DarkGray = "\x1b[90m";
 const Red = "\x1b[91m";
+const DarkGreen = "\x1b[32m";
 const Green = "\x1b[92m";
 const Blue = "\x1b[94m";
 const Cyan = "\x1b[96m";
@@ -366,7 +367,14 @@ pub fn runTests(tests: []const TestFuncInfo, verbose: bool) !bool {
         const testList = groupMap.get(groupName.?.*).?;
 
         if(groupName.?.len > 0) {
-            std.debug.print("# {s}\n", .{groupName.?.*});
+            if(verbose) {
+                std.debug.print(DarkGreen ++ "# ----------------------------------" ++ Reset ++ "\n", .{});
+                std.debug.print(DarkGreen ++ "# " ++ Green ++ "{s}\n", .{groupName.?.*});
+                std.debug.print(DarkGreen ++ "# ----------------------------------" ++ Reset ++ "\n", .{});
+            }
+            else {
+                std.debug.print("\n\n{s}: ", .{groupName.?.*});
+            }
         }
 
         for(testList.items) |f| {
