@@ -128,13 +128,15 @@ pub const TestContext = struct {
     failures: std.ArrayList(TestFailure),
     alloc: std.mem.Allocator,
     verbose: bool,
+    printStackTraceOnFail: bool,
     currTestName: ?[]const u8,
 
-    fn init(alloc: std.mem.Allocator, verbose: bool) TestContext {
+    fn init(alloc: std.mem.Allocator, verbose: bool, printStackTraceOnFail: bool) TestContext {
         return .{
             .failures = std.ArrayList(TestFailure).init(alloc),
             .alloc = alloc,
             .verbose = verbose,
+            .printStackTraceOnFail = printStackTraceOnFail,
             .currTestName = null,
         };
     }
@@ -166,10 +168,11 @@ pub const TestContext = struct {
 
         
     fn printErrorEnd(self: *TestContext) void {
-        _ = self;
-        printStackTrace() catch {
-            // std.debug.print("Unable to print stack trace: {}", .{err});
-        };
+        if(self.printStackTraceOnFail) {
+            printStackTrace() catch {
+                // std.debug.print("Unable to print stack trace: {}", .{err});
+            };
+        }
 
         std.debug.print("\n", .{});
     }
@@ -332,7 +335,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         alloc = std.heap.page_allocator;
     }
 
-    GlobalTestContext = TestContext.init(alloc, opts.verbose);
+    GlobalTestContext = TestContext.init(alloc, opts.verbose, opts.printStackTraceOnFail);
 
     var testsToRun: []const TestFuncInfo = undefined;
     if(opts.allowFilters != null) {
