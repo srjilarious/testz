@@ -9,5 +9,7 @@ const DiscoveredTests = testz.discoverTests(.{
 
 pub fn main() !void {
     const verbose = if (std.os.argv.len > 1 and std.mem.eql(u8, "verbose", std.mem.span(std.os.argv[1]))) true else false;
-    _ = try testz.runTests(DiscoveredTests, verbose);
+    var filters: [1][]const u8 = .{"Misc Tests"};
+    const filters2: [][]const u8 = filters[0..];
+    _ = try testz.runTests(DiscoveredTests, .{ .verbose = verbose, .allowFilters = filters2});
 }

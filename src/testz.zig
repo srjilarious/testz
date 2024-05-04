@@ -316,14 +316,59 @@ pub fn expectNotEqual(expected: anytype, actual: anytype) !void {
 const TestFuncList = std.ArrayList(TestFuncInfo);
 const TestFuncMap = std.StringHashMap(TestFuncList);
 
-pub fn runTests(tests: []const TestFuncInfo, verbose: bool) !bool {
-    const alloc = std.heap.page_allocator;
-    GlobalTestContext = TestContext.init(alloc, verbose);
+pub const RunTestOpts = struct {
+    alloc: ?std.mem.Allocator = null,
+    allowFilters: ?[][]const u8 = null,
+    verbose: bool = false,
+    printStackTraceOnFail: bool = true,
+};
+
+pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
+    var alloc: std.mem.Allocator = undefined;
+    if(opts.alloc != null) {
+        alloc = opts.alloc.?;
+    }
+    else {
+        alloc = std.heap.page_allocator;
+    }
+
+    GlobalTestContext = TestContext.init(alloc, opts.verbose);
+
+    var testsToRun: []const TestFuncInfo = undefined;
+    if(opts.allowFilters != null) {
+        var filters = std.StringHashMap(bool).init(alloc);
+        defer filters.deinit();
+        for(opts.allowFilters.?) |filt| {
+            try filters.put(filt, true);
+        }
+
+        var tempList = std.ArrayList(TestFuncInfo).init(alloc);
+        for(tests) |t| {
+            var added: bool = false;
+            if(t.group != null) {
+                if(filters.contains(t.group.?)) {
+                    try tempList.append(t);
+                    added = true;
+                }
+            }
+
+            if(!added) {
+                if(filters.contains(t.name)) {
+                    try tempList.append(t);
+                }
+            }
+        }
+
+        testsToRun = try tempList.toOwnedSlice();
+    }
+    else {
+        testsToRun = tests;
+    }
 
     var groupMap = TestFuncMap.init(alloc);
     defer groupMap.deinit();
 
-    for(tests) |t| {
+    for(testsToRun) |t| {
         const groupName = if(t.group != null) t.group.? else "";
         if(!groupMap.contains(groupName)) {
             const list = TestFuncList.init(alloc);
@@ -335,7 +380,7 @@ pub fn runTests(tests: []const TestFuncInfo, verbose: bool) !bool {
         try list.append(t);
     }
 
-    if (verbose) {
+    if (opts.verbose) {
         std.debug.print("\nRunning {} tests:\n", .{tests.len});
     } 
     else {
@@ -349,7 +394,7 @@ pub fn runTests(tests: []const TestFuncInfo, verbose: bool) !bool {
 
     // Find the longest length name in the tests for formatting.
     var verboseLength: usize = 0;
-    if (verbose) {
+    if (opts.verbose) {
         for (tests) |f| {
             if (f.name.len > verboseLength) {
                 verboseLength = f.name.len;
@@ -367,7 +412,7 @@ pub fn runTests(tests: []const TestFuncInfo, verbose: bool) !bool {
         const testList = groupMap.get(groupName.?.*).?;
 
         if(groupName.?.len > 0) {
-            if(verbose) {
+            if(opts.verbose) {
                 std.debug.print(DarkGreen ++ "# ----------------------------------" ++ Reset ++ "\n", .{});
                 std.debug.print(DarkGreen ++ "# " ++ Green ++ "{s}\n", .{groupName.?.*});
                 std.debug.print(DarkGreen ++ "# ----------------------------------" ++ Reset ++ "\n", .{});
@@ -383,7 +428,7 @@ pub fn runTests(tests: []const TestFuncInfo, verbose: bool) !bool {
             const testPrintName = if(f.skip) f.name[5..] else f.name;
             
             GlobalTestContext.?.setCurrentTest(testPrintName);
-            if (verbose) {
+            if (opts.verbose) {
                 if(f.skip) {
                     std.debug.print("\nSkipping " ++ DarkGray ++ "{s}" ++ Reset ++ "..", 
                         .{testPrintName});
@@ -414,7 +459,7 @@ pub fn runTests(tests: []const TestFuncInfo, verbose: bool) !bool {
             if(!errorCaught) {
                 testsPassed += 1;
 
-                if (verbose) {
+                if (opts.verbose) {
                     std.debug.print(Green ++ "\u{2713}" ++ Reset, .{});
                 } else {
                     std.debug.print(Green ++ "." ++ Reset, .{});
@@ -439,6 +484,10 @@ pub fn runTests(tests: []const TestFuncInfo, verbose: bool) !bool {
         testsRun 
     });
 
+    // Clean up the slice we created if we had filters.
+    if(opts.allowFilters != null) {
+        alloc.free(testsToRun);
+    }
 
     return testsFailed == 0;
 }
