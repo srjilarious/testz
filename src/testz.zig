@@ -147,10 +147,27 @@ pub fn discoverTests(comptime mods: anytype) []const TestFuncInfo {
 }
 
 pub const TestFailure = struct { 
-    //testName: [256]u8, 
-    lineNo: usize, 
-    errorMessage: []u8,
-    // stackTrace: []u8
+    testName: []const u8,
+    lineNo: usize,
+    errorMessage: ?[]const u8,
+    stackTrace: ?[]const u8,
+    alloc: std.mem.Allocator,
+
+    pub fn init(testName: []const u8, alloc: std.mem.Allocator) !TestFailure {
+        return .{
+            .alloc = alloc,
+            .testName = try alloc.dupe(u8, testName),
+            .lineNo = 0,
+            .errorMessage = null,
+            .stackTrace = null,
+        };
+    }
+
+    pub fn deinit(self: *TestFailure) void {
+        self.alloc.free(self.testName);
+        self.alloc.free(self.errorMessage);
+        self.alloc.free(self.stackTrace);
+    }
 };
 
 pub const TestContext = struct { 
@@ -170,118 +187,116 @@ pub const TestContext = struct {
         };
     }
 
-    fn deinit(self: *TestContext) void {
-        for(self.failures) |f| {
-            self.alloc.free(f.errorMessage);
+   fn deinit(self: *TestContext) void {
+        for(self.failures.items) |f| {
+            var fv = f;
+            fv.deinit();
         }
+
         self.alloc.free(self.failures);
-    }
+    } 
 
     fn setCurrentTest(self: *TestContext, name: []const u8) void {
         self.currTestName = name;
     }
 
-    fn printErrorBegin(self: *TestContext) void {
-        // Print the test failed.
-        std.debug.print(Red ++ "X" ++ Reset ++ "\n\n", .{});
-
-        if(self.verbose) {
-            // If verbose, we don't need to print the test name in the fail message
-            // since it will already show up in the list of tests running.
-            std.debug.print(Red ++ "FAIL" ++ Reset ++ ": ", .{});
-        }
-        else {
-            std.debug.print(Red ++ "FAIL " ++ Yellow ++ "{?s}" ++ Reset ++ ": ", .{self.currTestName});
-        }
+    fn formatOwnedSliceMessage(alloc: std.mem.Allocator, comptime fmt: []const u8, params: anytype) ![]const u8 {
+        var msgBuilder = StringBuilder.init(alloc);
+        defer msgBuilder.deinit();
+        const writer = msgBuilder.writer();
+        try std.fmt.format(writer, fmt, params);
+        return msgBuilder.toOwnedSlice();
     }
+
+    fn handleTestError(self: *TestContext, comptime fmt: []const u8, params: anytype) !void {
+        var err = try TestFailure.init(self.currTestName.?, self.alloc);
+        err.errorMessage = try formatOwnedSliceMessage(self.alloc, fmt, params);
+        if(self.printStackTraceOnFail) {
+            try printStackTrace(&err);
+        }
+
+        try self.failures.append(err);
+    }
+
+    // fn printErrorBegin(_: *TestContext) void {
+    //     // Print the test failed.
+    //     std.debug.print(Red ++ "X" ++ Reset ++ "\n\n", .{});
+    //
+    //     // if(self.verbose) {
+    //     //     // If verbose, we don't need to print the test name in the fail message
+    //     //     // since it will already show up in the list of tests running.
+    //     //     std.debug.print(Red ++ "FAIL" ++ Reset ++ ": ", .{});
+    //     // }
+    //     // else {
+    //     //     std.debug.print(Red ++ "FAIL " ++ Yellow ++ "{?s}" ++ Reset ++ ": ", .{self.currTestName});
+    //     // }
+    // }
 
         
-    fn printErrorEnd(self: *TestContext) void {
-        if(self.printStackTraceOnFail) {
-            printStackTrace() catch {
-                // std.debug.print("Unable to print stack trace: {}", .{err});
-            };
-        }
-
-        std.debug.print("\n", .{});
-    }
-
+    // fn printErrorEnd(self: *TestContext) void {
+    //     if(self.printStackTraceOnFail) {
+    //         printStackTrace() catch {
+    //             // std.debug.print("Unable to print stack trace: {}", .{err});
+    //         };
+    //     }
+    //
+    //     std.debug.print("\n", .{});
+    // }
+    //
     fn fail(self: *TestContext) !void {
-        self.printErrorBegin();
-        std.debug.print("Test hit failure point.", .{});
-        self.printErrorEnd();
+        try self.handleTestError("Test hit failure point.", .{});
         return error.TestFailed;
     }
 
     fn failWith(self: *TestContext, err: anytype) !void {
-        self.printErrorBegin();
-        std.debug.print("Test hit failure point: {}", .{err});
-        self.printErrorEnd();
+        try self.handleTestError("Test hit failure point: {}", .{err});
         return error.TestFailed;
     }
 
     fn expectTrue(self: *TestContext, actual: bool) !void {
         if(actual != true) {
-            self.printErrorBegin();
-            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be true" ++ Reset, 
-            .{actual});
-            self.printErrorEnd();
+            try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to be true" ++ Reset, .{actual});
             return error.TestExpectedTrue;
         }
     }
 
     fn expectFalse(self: *TestContext, actual: bool) !void {
         if(actual == true) {
-            self.printErrorBegin();
-            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be false " ++ Reset, 
-            .{actual});
-            self.printErrorEnd();
+            try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to be false " ++ Reset, .{actual});
             return error.TestExpectedFalse;
         }
     }
 
     fn expectEqualStr(self: *TestContext, expected: []const u8, actual: []const u8) !void {
         if(std.mem.eql(u8, expected, actual) == false) {
-            self.printErrorBegin();
-            std.debug.print("Expected " ++ White ++ "{s}" ++ Reset ++ " to be {s} " ++ Reset,
-            .{actual, expected});
-            self.printErrorEnd();
+            try self.handleTestError("Expected " ++ White ++ "{s}" ++ Reset ++ " to be {s} " ++ Reset, .{actual, expected});
             return error.TestExpectedEqual;
         }
     }
     
     fn expectEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
         if(expected != actual) {
-            self.printErrorBegin();
-            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be {} " ++ Reset, 
-            .{actual, expected});
-            self.printErrorEnd();
+            try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to be {} " ++ Reset, .{actual, expected});
             return error.TestExpectedEqual;
         }
     }
     
     fn expectNotEqualStr(self: *TestContext, expected: []const u8, actual: []const u8) !void {
         if(std.mem.eql(u8, expected, actual) == true) {
-            self.printErrorBegin();
-            std.debug.print("Expected " ++ White ++ "{s}" ++ Reset ++ " to NOT be {s} " ++ Reset, 
-            .{actual, expected});
-            self.printErrorEnd();
+            try self.handleTestError("Expected " ++ White ++ "{s}" ++ Reset ++ " to NOT be {s} " ++ Reset, .{actual, expected});
             return error.TestExpectedNotEqual;
         }
     }
 
     fn expectNotEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
         if(expected == actual) {
-           self.printErrorBegin();
-            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to NOT be {} " ++ Reset, 
-            .{actual, expected});
-            self.printErrorEnd(); 
-            return error.TestExpectedNotEqual;
+           try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to NOT be {} " ++ Reset, .{actual, expected});
+           return error.TestExpectedNotEqual;
         }
     }
 };
 
-var GlobalTestContext: ?TestContext = null;//TestContext.init();
+var GlobalTestContext: ?TestContext = null;
 
 pub fn fail() !void {
     try GlobalTestContext.?.fail();
@@ -456,6 +471,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
 
             var errorCaught = false;
             f.func() catch {
+                std.debug.print(Red ++ "X" ++ Reset, .{});
                 errorCaught = true;
                 testsFailed += 1;
             };
@@ -466,13 +482,21 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
                 if (opts.verbose) {
                     std.debug.print(Green ++ "\u{2713}" ++ Reset, .{});
                 } else {
-                    std.debug.print(Green ++ "." ++ Reset, .{});
+                    std.debug.print(Green ++ "\u{22c5}" ++ Reset, .{});
                 }
             }
         }
 
         if(opts.verbose and group.name.len > 0) {
             std.debug.print("\n\n", .{});
+        }
+    }
+
+    for(GlobalTestContext.?.failures.items) |failure| {
+        std.debug.print("\n\n" ++ Red ++ "FAIL " ++ Yellow ++ "{s}" ++ Reset ++ ": ", .{failure.testName});
+        std.debug.print("{?s}", .{failure.errorMessage});
+        if(opts.printStackTraceOnFail) {
+            std.debug.print("{?s}", .{failure.stackTrace});
         }
     }
 
@@ -493,9 +517,12 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         alloc.free(testsToRun);
     }
 
+    // Fix me.
+    // GlobalTestContext.?.deinit();
     return testsFailed == 0;
 }
 
+const StringBuilder = std.ArrayList(u8);
 
 // ----------------------------------------------------------------------------
 // Stack tracing helpers
@@ -554,7 +581,7 @@ fn printLinesFromFileAnyOs(out_stream: anytype, line_info: std.debug.LineInfo, c
 // A stack trace printing function, using mostly code from std.debug
 // Modified to print out more context from the file and add some 
 // extra highlighting.
-fn printStackTrace() !void {
+fn printStackTrace(failure: *TestFailure) !void {
     const stderr = std.io.getStdErr().writer();
     if (builtin.strip_debug_info) {
         stderr.print("Unable to dump stack trace: debug info stripped\n", .{}) catch return;
@@ -579,6 +606,9 @@ fn printStackTrace() !void {
     } else null) orelse std.debug.StackIterator.init(null, null);
     defer it.deinit();
 
+    var trace = StringBuilder.init(failure.alloc);
+    const out_stream = trace.writer();
+    defer trace.deinit();
     while (it.next()) |return_address| {
         const module = debug_info.getModuleForAddress(return_address) catch |err| switch (err) {
             error.MissingDebugInfo, error.InvalidDebugInfo => return, //printUnknownSource(debug_info, out_stream, address, tty_config),
@@ -600,17 +630,20 @@ fn printStackTrace() !void {
             // Skip printing frames within the framework.
             if(std.mem.endsWith(u8, li.file_name, "testz.zig")) continue;
 
-            try stderr.print("\n{s}:" ++ White ++ "{d}" ++ Reset ++ ":{d}:\n", .{ li.file_name, li.line, li.column });
+            // std.debug.print("*** Symbol: {s}, {s}\n", .{symbol_info.symbol_name, symbol_info.compile_unit_name});
+            try std.fmt.format(out_stream, "\n{s}:" ++ White ++ "{d}" ++ Reset ++ ":{d}:\n", .{ li.file_name, li.line, li.column });
         } else {
-            try stderr.writeAll("???:?:?\n");
+            _ = try out_stream.write("???:?:?\n");
         }
 
         // try stderr.print(" 0x{x} in {s} ({s})\n\n", .{ return_address, symbol_info.symbol_name, symbol_info.compile_unit_name });
 
         if (line_info) |li| {
-            try printLinesFromFileAnyOs(stderr, li, 3);
+            try printLinesFromFileAnyOs(out_stream, li, 3);
         }
     }
+
+    failure.stackTrace = try trace.toOwnedSlice();
 
     // std.debug.writeCurrentStackTrace(stderr, debug_info, std.io.tty.detectConfig(std.io.getStdErr()), null) catch |err| {
     //     stderr.print("Unable to dump stack trace: {s}\n", .{@errorName(err)}) catch return;

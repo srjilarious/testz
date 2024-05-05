@@ -13,10 +13,10 @@ pub fn main() !void {
         DiscoveredTests,
         .{
             .verbose = verbose,
-            .allowFilters = &[_][]const u8{
-                "misc", 
-                "successTest"
-            },
+            // .allowFilters = &[_][]const u8{
+            //     "misc", 
+            //     "successTest"
+            // },
             .printStackTraceOnFail = true
         }
     );
