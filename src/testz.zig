@@ -19,7 +19,7 @@ pub const TestFuncInfo = struct {
     func: TestFunc, 
     name: []const u8,
     skip: bool,
-    group: ?[]const u8
+    groupTag: ?[]const u8
 };
 
 // pub const TestGroup = struct {
@@ -34,11 +34,13 @@ pub const TestFuncInfo = struct {
 // Struct for how a module can be passed in and associated as a group.
 pub const Group = struct {
     name: [] const u8,
+    // The string for filtering on.
+    tag: []const u8, 
     mod: type
 };
 
 
-pub fn discoverTestsInModule(comptime group: ?[]const u8, comptime mod: type) []const TestFuncInfo {
+pub fn discoverTestsInModule(comptime groupTag: ?[]const u8, comptime mod: type) []const TestFuncInfo {
 
     comptime var numTests: usize = 0;
     const decls = @typeInfo(mod).Struct.decls;
@@ -64,7 +66,7 @@ pub fn discoverTestsInModule(comptime group: ?[]const u8, comptime mod: type) []
                     .func = fld, 
                     .name = decl.name,
                     .skip = skip,
-                    .group = group,
+                    .groupTag = groupTag,
                 };
                 idx += 1;
             }
@@ -80,7 +82,7 @@ pub fn discoverTests(comptime mods: anytype) []const TestFuncInfo {
     comptime var tests: [MaxTests]TestFuncInfo = undefined;
     comptime var totalTests: usize = 0;
     comptime var fieldIdx = 0;
-    comptime var currGroupName: ?[]const u8 = null;
+    comptime var currGroupTag: ?[]const u8 = null;
     const ModsType = @TypeOf(mods);
     const modsTypeInfo = @typeInfo(ModsType);
     if (modsTypeInfo != .Struct) {
@@ -95,7 +97,7 @@ pub fn discoverTests(comptime mods: anytype) []const TestFuncInfo {
         const currMod = blk: {
             if(@TypeOf(currIndexItem) == Group) {
                 
-                currGroupName = @field(currIndexItem, "name");
+                currGroupTag = @field(currIndexItem, "tag");
                 // Grab the mods field from the Group to extract actual tests from.
                 break :blk @field(currIndexItem, "mod");
             }
@@ -103,14 +105,14 @@ pub fn discoverTests(comptime mods: anytype) []const TestFuncInfo {
             break :blk @field(mods, fieldName);
         };
 
-        const modTests = discoverTestsInModule(currGroupName, currMod);
+        const modTests = discoverTestsInModule(currGroupTag, currMod);
         for (modTests) |t| {
             tests[totalTests] = t;
             totalTests += 1;
         }
 
         // Reset the group name
-        currGroupName = null;
+        currGroupTag = null;
     }
 
     const final: [totalTests]TestFuncInfo = tests[0..totalTests].*;
@@ -348,8 +350,8 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         var tempList = std.ArrayList(TestFuncInfo).init(alloc);
         for(tests) |t| {
             var added: bool = false;
-            if(t.group != null) {
-                if(filters.contains(t.group.?)) {
+            if(t.groupTag != null) {
+                if(filters.contains(t.groupTag.?)) {
                     try tempList.append(t);
                     added = true;
                 }
@@ -372,14 +374,14 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
     defer groupMap.deinit();
 
     for(testsToRun) |t| {
-        const groupName = if(t.group != null) t.group.? else "";
-        if(!groupMap.contains(groupName)) {
+        const groupTag = if(t.groupTag != null) t.groupTag.? else "";
+        if(!groupMap.contains(groupTag)) {
             const list = TestFuncList.init(alloc);
-            try groupMap.put(groupName, list);
+            try groupMap.put(groupTag, list);
 
         }
 
-        var list = groupMap.getPtr(groupName).?;
+        var list = groupMap.getPtr(groupTag).?;
         try list.append(t);
     }
 
@@ -409,19 +411,19 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
     var groupIterator = groupMap.keyIterator();
     //for (tests) |f| {
     while(true) {
-        const groupName = groupIterator.next();
-        if(groupName == null) break;
+        const groupTag = groupIterator.next();
+        if(groupTag == null) break;
 
-        const testList = groupMap.get(groupName.?.*).?;
+        const testList = groupMap.get(groupTag.?.*).?;
 
-        if(groupName.?.len > 0) {
+        if(groupTag.?.len > 0) {
             if(opts.verbose) {
                 std.debug.print(DarkGreen ++ "# ----------------------------------" ++ Reset ++ "\n", .{});
-                std.debug.print(DarkGreen ++ "# " ++ Green ++ "{s}\n", .{groupName.?.*});
+                std.debug.print(DarkGreen ++ "# " ++ Green ++ "{s}\n", .{groupTag.?.*});
                 std.debug.print(DarkGreen ++ "# ----------------------------------" ++ Reset ++ "\n", .{});
             }
             else {
-                std.debug.print("\n\n{s}: ", .{groupName.?.*});
+                std.debug.print("\n\n{s}: ", .{groupTag.?.*});
             }
         }
 
@@ -470,7 +472,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             }
         }
 
-        if(groupName.?.len > 0) {
+        if(groupTag.?.len > 0) {
             std.debug.print("\n\n", .{});
         }
     }
