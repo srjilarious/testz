@@ -18,18 +18,15 @@ pub const TestFunc = *const fn () anyerror!void;
 pub const TestFuncInfo = struct { 
     func: TestFunc, 
     name: []const u8,
-    skip: bool,
-    groupTag: ?[]const u8
+    group: TestGroup,
+    skip: bool = false,
 };
 
-// pub const TestGroup = struct {
-//     name: ?[]const u8,
-//     tests: []const TestFuncInfo
-// };
-//
-// pub const TestSet = struct {
-//     groups: []const TestGroup
-// };
+// Unpacked information from Group, not counting the module.
+pub const TestGroup = struct {
+    name: ?[]const u8,
+    tag: []const u8,
+};
 
 // Struct for how a module can be passed in and associated as a group.
 pub const Group = struct {
@@ -39,8 +36,32 @@ pub const Group = struct {
     mod: type
 };
 
+const TestFuncGroup = struct {
+    name: []const u8,
+    tests: std.ArrayList(TestFuncInfo),
 
-pub fn discoverTestsInModule(comptime groupTag: ?[]const u8, comptime mod: type) []const TestFuncInfo {
+    pub fn init(name: []const u8, alloc: std.mem.Allocator) TestFuncGroup {
+        return .{
+            .name = name,
+            .tests = std.ArrayList(TestFuncInfo).init(alloc)
+        };
+    }
+
+    pub fn deinit(self: *TestFuncGroup) void {
+        self.tests.deinit();
+    }
+};
+
+const TestFuncMap = std.StringHashMap(TestFuncGroup);
+
+pub const RunTestOpts = struct {
+    alloc: ?std.mem.Allocator = null,
+    allowFilters: ?[]const []const u8 = null,
+    verbose: bool = false,
+    printStackTraceOnFail: bool = true,
+};
+
+pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type) []const TestFuncInfo {
 
     comptime var numTests: usize = 0;
     const decls = @typeInfo(mod).Struct.decls;
@@ -66,7 +87,7 @@ pub fn discoverTestsInModule(comptime groupTag: ?[]const u8, comptime mod: type)
                     .func = fld, 
                     .name = decl.name,
                     .skip = skip,
-                    .groupTag = groupTag,
+                    .group = groupInfo,
                 };
                 idx += 1;
             }
@@ -82,7 +103,7 @@ pub fn discoverTests(comptime mods: anytype) []const TestFuncInfo {
     comptime var tests: [MaxTests]TestFuncInfo = undefined;
     comptime var totalTests: usize = 0;
     comptime var fieldIdx = 0;
-    comptime var currGroupTag: ?[]const u8 = null;
+    comptime var currGroup: TestGroup = undefined;
     const ModsType = @TypeOf(mods);
     const modsTypeInfo = @typeInfo(ModsType);
     if (modsTypeInfo != .Struct) {
@@ -97,22 +118,28 @@ pub fn discoverTests(comptime mods: anytype) []const TestFuncInfo {
         const currMod = blk: {
             if(@TypeOf(currIndexItem) == Group) {
                 
-                currGroupTag = @field(currIndexItem, "tag");
+                currGroup = .{
+                    .name = @field(currIndexItem, "name"),
+                    .tag = @field(currIndexItem, "tag"),
+                };
                 // Grab the mods field from the Group to extract actual tests from.
                 break :blk @field(currIndexItem, "mod");
             }
+            else {
+                currGroup = .{
+                    .name = "Default",
+                    .tag = "default",
+                };
             
-            break :blk @field(mods, fieldName);
+                break :blk @field(mods, fieldName);
+            }
         };
 
-        const modTests = discoverTestsInModule(currGroupTag, currMod);
+        const modTests = discoverTestsInModule(currGroup, currMod);
         for (modTests) |t| {
             tests[totalTests] = t;
             totalTests += 1;
         }
-
-        // Reset the group name
-        currGroupTag = null;
     }
 
     const final: [totalTests]TestFuncInfo = tests[0..totalTests].*;
@@ -318,16 +345,6 @@ pub fn expectNotEqual(expected: anytype, actual: anytype) !void {
     try GlobalTestContext.?.expectNotEqual(expected, actual);
 }
 
-const TestFuncList = std.ArrayList(TestFuncInfo);
-const TestFuncMap = std.StringHashMap(TestFuncList);
-
-pub const RunTestOpts = struct {
-    alloc: ?std.mem.Allocator = null,
-    allowFilters: ?[][]const u8 = null,
-    verbose: bool = false,
-    printStackTraceOnFail: bool = true,
-};
-
 pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
     var alloc: std.mem.Allocator = undefined;
     if(opts.alloc != null) {
@@ -339,6 +356,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
 
     GlobalTestContext = TestContext.init(alloc, opts.verbose, opts.printStackTraceOnFail);
 
+    // Filter on the list of tests based on provided tag filters.
     var testsToRun: []const TestFuncInfo = undefined;
     if(opts.allowFilters != null) {
         var filters = std.StringHashMap(bool).init(alloc);
@@ -350,11 +368,9 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         var tempList = std.ArrayList(TestFuncInfo).init(alloc);
         for(tests) |t| {
             var added: bool = false;
-            if(t.groupTag != null) {
-                if(filters.contains(t.groupTag.?)) {
-                    try tempList.append(t);
-                    added = true;
-                }
+            if(filters.contains(t.group.tag)) {
+                try tempList.append(t);
+                added = true;
             }
 
             if(!added) {
@@ -370,23 +386,24 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         testsToRun = tests;
     }
 
+    // Create a map of tags to the list of tests within that group from
+    // the potentially filtered set.
     var groupMap = TestFuncMap.init(alloc);
     defer groupMap.deinit();
 
     for(testsToRun) |t| {
-        const groupTag = if(t.groupTag != null) t.groupTag.? else "";
-        if(!groupMap.contains(groupTag)) {
-            const list = TestFuncList.init(alloc);
-            try groupMap.put(groupTag, list);
+        if(!groupMap.contains(t.group.tag)) {
+            const group = TestFuncGroup.init(t.group.name.?, alloc);
+            try groupMap.put(t.group.tag, group);
 
         }
 
-        var list = groupMap.getPtr(groupTag).?;
-        try list.append(t);
+        var group = groupMap.getPtr(t.group.tag).?;
+        try group.tests.append(t);
     }
 
     if (opts.verbose) {
-        std.debug.print("\nRunning {} tests:\n", .{tests.len});
+        std.debug.print("\nRunning {} tests:\n", .{testsToRun.len});
     } 
     else {
         std.debug.print("\n", .{});
@@ -400,34 +417,32 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
     // Find the longest length name in the tests for formatting.
     var verboseLength: usize = 0;
     if (opts.verbose) {
-        for (tests) |f| {
+        for (testsToRun) |f| {
             if (f.name.len > verboseLength) {
                 verboseLength = f.name.len;
             }
         }
     }
 
-    // Run each of the tests.
+    // Iterate over each group of tests.
     var groupIterator = groupMap.keyIterator();
-    //for (tests) |f| {
     while(true) {
         const groupTag = groupIterator.next();
         if(groupTag == null) break;
 
-        const testList = groupMap.get(groupTag.?.*).?;
+        var group = groupMap.get(groupTag.?.*).?;
 
-        if(groupTag.?.len > 0) {
-            if(opts.verbose) {
-                std.debug.print(DarkGreen ++ "# ----------------------------------" ++ Reset ++ "\n", .{});
-                std.debug.print(DarkGreen ++ "# " ++ Green ++ "{s}\n", .{groupTag.?.*});
-                std.debug.print(DarkGreen ++ "# ----------------------------------" ++ Reset ++ "\n", .{});
-            }
-            else {
-                std.debug.print("\n\n{s}: ", .{groupTag.?.*});
-            }
+        // Clean up the group test memory once done iterating
+        defer group.deinit();
+        
+        if(opts.verbose and group.name.len > 0 and !std.mem.eql(u8, group.name, "default")) {
+            std.debug.print(DarkGreen ++ "# ----------------------------------" ++ Reset ++ "\n", .{});
+            std.debug.print(DarkGreen ++ "# " ++ Green ++ "{s}\n", .{group.name});
+            std.debug.print(DarkGreen ++ "# ----------------------------------" ++ Reset ++ "\n", .{});
         }
 
-        for(testList.items) |f| {
+        // Run each of the tests for the group.
+        for(group.tests.items) |f| {
             testsRun += 1;
 
             const testPrintName = if(f.skip) f.name[5..] else f.name;
@@ -472,7 +487,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             }
         }
 
-        if(groupTag.?.len > 0) {
+        if(opts.verbose and group.name.len > 0) {
             std.debug.print("\n\n", .{});
         }
     }
