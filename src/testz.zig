@@ -179,14 +179,14 @@ pub const TestContext = struct {
 
     fn fail(self: *TestContext) !void {
         self.printErrorBegin();
-        std.debug.print("Test hit failure point.\n", .{});
+        std.debug.print("Test hit failure point.", .{});
         self.printErrorEnd();
         return error.TestFailed;
     }
 
     fn failWith(self: *TestContext, err: anytype) !void {
         self.printErrorBegin();
-        std.debug.print("Test hit failure point: {}\n", .{err});
+        std.debug.print("Test hit failure point: {}", .{err});
         self.printErrorEnd();
         return error.TestFailed;
     }
@@ -194,7 +194,7 @@ pub const TestContext = struct {
     fn expectTrue(self: *TestContext, actual: bool) !void {
         if(actual != true) {
             self.printErrorBegin();
-            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be true" ++ Reset ++ "\n", 
+            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be true" ++ Reset, 
             .{actual});
             self.printErrorEnd();
             return error.TestExpectedTrue;
@@ -204,7 +204,7 @@ pub const TestContext = struct {
     fn expectFalse(self: *TestContext, actual: bool) !void {
         if(actual == true) {
             self.printErrorBegin();
-            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be false " ++ Reset ++ "\n", 
+            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be false " ++ Reset, 
             .{actual});
             self.printErrorEnd();
             return error.TestExpectedFalse;
@@ -214,7 +214,7 @@ pub const TestContext = struct {
     fn expectEqualStr(self: *TestContext, expected: []const u8, actual: []const u8) !void {
         if(std.mem.eql(u8, expected, actual) == false) {
             self.printErrorBegin();
-            std.debug.print("Expected " ++ White ++ "{s}" ++ Reset ++ " to be {s} " ++ Reset ++ "\n", 
+            std.debug.print("Expected " ++ White ++ "{s}" ++ Reset ++ " to be {s} " ++ Reset,
             .{actual, expected});
             self.printErrorEnd();
             return error.TestExpectedEqual;
@@ -224,7 +224,7 @@ pub const TestContext = struct {
     fn expectEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
         if(expected != actual) {
             self.printErrorBegin();
-            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be {} " ++ Reset ++ "\n", 
+            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to be {} " ++ Reset, 
             .{actual, expected});
             self.printErrorEnd();
             return error.TestExpectedEqual;
@@ -234,7 +234,7 @@ pub const TestContext = struct {
     fn expectNotEqualStr(self: *TestContext, expected: []const u8, actual: []const u8) !void {
         if(std.mem.eql(u8, expected, actual) == true) {
             self.printErrorBegin();
-            std.debug.print("Expected " ++ White ++ "{s}" ++ Reset ++ " to NOT be {s} " ++ Reset ++ "\n", 
+            std.debug.print("Expected " ++ White ++ "{s}" ++ Reset ++ " to NOT be {s} " ++ Reset, 
             .{actual, expected});
             self.printErrorEnd();
             return error.TestExpectedNotEqual;
@@ -272,7 +272,7 @@ pub const TestContext = struct {
         //     else => {
                 if(expected == actual) {
                    self.printErrorBegin();
-                    std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to NOT be {} " ++ Reset ++ "\n", 
+                    std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to NOT be {} " ++ Reset, 
                     .{actual, expected});
                     self.printErrorEnd(); 
                     return error.TestExpectedNotEqual;
