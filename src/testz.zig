@@ -271,43 +271,13 @@ pub const TestContext = struct {
     }
 
     fn expectNotEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
-        // @compileLog(@typeInfo(@TypeOf(actual)));
-        // switch (@typeInfo(@TypeOf(actual))) {
-        //     .Pointer => |pointer| {
-        //         switch (pointer.size) {
-        //             .One, .Many, .C => {
-        //                 if (actual == expected) {
-        //                     self.printErrorBegin();
-        //                     std.debug.print("expected NOT {*}, found {*}\n", .{ expected, actual });
-        //                     self.printErrorEnd();
-        //                     return error.TestExpectedNotEqual;
-        //                 }
-        //             },
-        //             .Slice => {
-        //                 if(std.mem.eql(pointer.child, expected, actual) == true) {
-        //                     self.printErrorBegin();
-        //                     std.debug.print("Expected " ++ White ++ "{s}" ++ Reset ++ " to NOT be {s} " ++ Reset ++ "\n", 
-        //                     .{actual, expected});
-        //                     self.printErrorEnd();
-        //                     return error.TestExpectedNotEqual;
-        //                 }
-        //                 // if (actual.len != expected.len) {
-        //                 //     print("expected slice len {}, found {}\n", .{ expected.len, actual.len });
-        //                 //     return error.TestExpectedEqual;
-        //                 // }
-        //             },
-        //         }
-        //     },
-        //     else => {
-                if(expected == actual) {
-                   self.printErrorBegin();
-                    std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to NOT be {} " ++ Reset, 
-                    .{actual, expected});
-                    self.printErrorEnd(); 
-                    return error.TestExpectedNotEqual;
-                }
-            // }
-        // }
+        if(expected == actual) {
+           self.printErrorBegin();
+            std.debug.print("Expected " ++ White ++ "{}" ++ Reset ++ " to NOT be {} " ++ Reset, 
+            .{actual, expected});
+            self.printErrorEnd(); 
+            return error.TestExpectedNotEqual;
+        }
     }
 };
 
@@ -343,6 +313,14 @@ pub fn expectNotEqualStr(expected: []const u8, actual: []const u8) !void {
 
 pub fn expectNotEqual(expected: anytype, actual: anytype) !void {
     try GlobalTestContext.?.expectNotEqual(expected, actual);
+}
+
+fn printChars(ch: []const u8, num: usize) void {
+    var n = num;
+    while (n > 0) {
+        std.debug.print("{s}", .{ch});
+        n -= 1;
+    }
 }
 
 pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
@@ -402,12 +380,13 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         try group.tests.append(t);
     }
 
-    if (opts.verbose) {
-        std.debug.print("\nRunning {} tests:\n", .{testsToRun.len});
-    } 
-    else {
-        std.debug.print("\n", .{});
-    }
+    // if (opts.verbose) {
+    //     std.debug.print("\nRunning {} tests:\n", .{testsToRun.len});
+    // } 
+    // else {
+    // }
+
+    std.debug.print("\n", .{});
 
     var testsRun: u32 = 0;
     var testsPassed: u32 = 0;
@@ -435,10 +414,18 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         // Clean up the group test memory once done iterating
         defer group.deinit();
         
-        if(opts.verbose and group.name.len > 0 and !std.mem.eql(u8, group.name, "default")) {
-            std.debug.print(DarkGreen ++ "# ----------------------------------" ++ Reset ++ "\n", .{});
+        if(opts.verbose and group.name.len > 0 and !std.mem.eql(u8, groupTag.?.*, "default")) {
+            // Print top line of group banner, 12 is the num of chars in a verbose test print
+            // regardless of name length.
+            std.debug.print(DarkGreen ++ "# ", .{});
+            printChars("-", verboseLength + 12 - 2);
+            std.debug.print(Reset ++ "\n", .{});
+
             std.debug.print(DarkGreen ++ "# " ++ Green ++ "{s}\n", .{group.name});
-            std.debug.print(DarkGreen ++ "# ----------------------------------" ++ Reset ++ "\n", .{});
+
+            std.debug.print(DarkGreen ++ "# ", .{});
+            printChars("-", verboseLength + 12 - 2);
+            std.debug.print(Reset, .{});
         }
 
         // Run each of the tests for the group.
@@ -457,11 +444,8 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
                     std.debug.print("\nRunning " ++ White ++ "{s}" ++ Reset ++ "...", 
                         .{testPrintName});
                 }
-                var num = @min(verboseLength - testPrintName.len, 128);
-                while (num > 0) {
-                    std.debug.print(".", .{});
-                    num -= 1;
-                }
+                const num = @min(verboseLength - testPrintName.len, 128);
+                printChars(".", num);
             }
 
             if(f.skip) {
