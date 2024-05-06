@@ -218,31 +218,6 @@ pub const TestContext = struct {
         try self.failures.append(err);
     }
 
-    // fn printErrorBegin(_: *TestContext) void {
-    //     // Print the test failed.
-    //     std.debug.print(Red ++ "X" ++ Reset ++ "\n\n", .{});
-    //
-    //     // if(self.verbose) {
-    //     //     // If verbose, we don't need to print the test name in the fail message
-    //     //     // since it will already show up in the list of tests running.
-    //     //     std.debug.print(Red ++ "FAIL" ++ Reset ++ ": ", .{});
-    //     // }
-    //     // else {
-    //     //     std.debug.print(Red ++ "FAIL " ++ Yellow ++ "{?s}" ++ Reset ++ ": ", .{self.currTestName});
-    //     // }
-    // }
-
-        
-    // fn printErrorEnd(self: *TestContext) void {
-    //     if(self.printStackTraceOnFail) {
-    //         printStackTrace() catch {
-    //             // std.debug.print("Unable to print stack trace: {}", .{err});
-    //         };
-    //     }
-    //
-    //     std.debug.print("\n", .{});
-    // }
-    //
     fn fail(self: *TestContext) !void {
         try self.handleTestError("Test hit failure point.", .{});
         return error.TestFailed;
@@ -395,12 +370,6 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         try group.tests.append(t);
     }
 
-    // if (opts.verbose) {
-    //     std.debug.print("\nRunning {} tests:\n", .{testsToRun.len});
-    // } 
-    // else {
-    // }
-
     std.debug.print("\n", .{});
 
     var testsRun: u32 = 0;
@@ -410,13 +379,13 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
 
     // Find the longest length name in the tests for formatting.
     var verboseLength: usize = 0;
-    if (opts.verbose) {
+    // if (opts.verbose) {
         for (testsToRun) |f| {
             if (f.name.len > verboseLength) {
                 verboseLength = f.name.len;
             }
         }
-    }
+    // }
 
     // Iterate over each group of tests.
     var groupIterator = groupMap.keyIterator();
@@ -493,11 +462,20 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
     }
 
     for(GlobalTestContext.?.failures.items) |failure| {
-        std.debug.print("\n\n" ++ Red ++ "FAIL " ++ Yellow ++ "{s}" ++ Reset ++ ": ", .{failure.testName});
-        std.debug.print("{?s}", .{failure.errorMessage});
-        if(opts.printStackTraceOnFail) {
-            std.debug.print("{?s}", .{failure.stackTrace});
-        }
+        std.debug.print("\n" ++ Red ++ "FAIL " ++ Yellow ++ "{s}" ++ Reset, .{failure.testName});
+        // if(opts.verbose) {
+            std.debug.print(": {?s}", .{failure.errorMessage});
+            if(opts.printStackTraceOnFail) {
+                std.debug.print("{?s}\n", .{failure.stackTrace});
+            }
+        // }
+        // else {
+            // if(opts.printStackTraceOnFail) {
+            //     // Try to roughly align the lines to the end of the bottom status report.
+            //     printChars(" ", @max(30, verboseLength) - failure.testName.len);
+            //     std.debug.print("   line {}", .{failure.lineNo});
+            // }
+        // }
     }
 
     //std.debug.print(Green ++ "\nDone!\n\n" ++ Reset, .{});
@@ -607,8 +585,11 @@ fn printStackTrace(failure: *TestFailure) !void {
     defer it.deinit();
 
     var trace = StringBuilder.init(failure.alloc);
+    // Preallocate some space for the stack trace.
+    try trace.ensureTotalCapacity(2048);
     const out_stream = trace.writer();
     defer trace.deinit();
+    var first = true;
     while (it.next()) |return_address| {
         const module = debug_info.getModuleForAddress(return_address) catch |err| switch (err) {
             error.MissingDebugInfo, error.InvalidDebugInfo => return, //printUnknownSource(debug_info, out_stream, address, tty_config),
@@ -629,9 +610,16 @@ fn printStackTrace(failure: *TestFailure) !void {
             
             // Skip printing frames within the framework.
             if(std.mem.endsWith(u8, li.file_name, "testz.zig")) continue;
+            // Skip over the call to runTests, assuming it's in `main`
+            if(std.mem.eql(u8, symbol_info.symbol_name, "main")) continue;
 
             // std.debug.print("*** Symbol: {s}, {s}\n", .{symbol_info.symbol_name, symbol_info.compile_unit_name});
             try std.fmt.format(out_stream, "\n{s}:" ++ White ++ "{d}" ++ Reset ++ ":{d}:\n", .{ li.file_name, li.line, li.column });
+
+            if(first) {
+                failure.lineNo = li.line;
+                first = false;
+            }
         } else {
             _ = try out_stream.write("???:?:?\n");
         }
