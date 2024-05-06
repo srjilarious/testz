@@ -639,3 +639,42 @@ fn printStackTrace(failure: *TestFailure) !void {
     // };
 }
 
+
+
+const zargs = @import("zargunaught");
+const Option = zargs.Option;
+
+// Parses the command line for options and runs the passed in tests.
+pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
+    var parser = try zargs.ArgParser.init(
+        std.heap.page_allocator, .{ 
+            .name = "Unit tests", 
+            .description = "Unit tests....", 
+            .opts = &[_]Option{
+                Option{ .longName = "verbose", .shortName = "v", .description = "Verbose output", .maxNumParams = 0 },
+                Option{ .longName = "stack_trace", .shortName = "s", .description = "Print stack traces on errors", .maxNumParams = 0 },
+            } 
+        });
+    defer parser.deinit();
+
+    var args = parser.parse() catch |err| {
+        std.debug.print("Error parsing args: {any}\n", .{err});
+        return;
+    };
+    defer args.deinit();
+
+    const verbose = args.hasOption("verbose");
+    const optPrintStackTrace = args.hasOption("stack_trace");
+
+    _ = try runTests(
+        testsToRun,
+        .{
+            .verbose = verbose,
+            // .allowFilters = &[_][]const u8{
+            //     "misc", 
+            //     "successTest"
+            // },
+            .printStackTraceOnFail = optPrintStackTrace
+        }
+    );
+}

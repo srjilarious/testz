@@ -1,0 +1,15 @@
+.{
+    .name = "testz_test",
+    .version = "0.5.0",
+    .paths = .{""},
+    .dependencies = .{
+        .zargunaught = .{
+            .path = "../../zargunaught",
+        },
+        .testz = .{
+            .path = "..",
+            //     // .hash = "12200811a46177bab3a72c34cd184d715133751a1c2b447caf61f7f6652e552f3dcb",
+            //     // .lazy = true,
+        },
+    },
+}
