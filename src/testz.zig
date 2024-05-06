@@ -640,8 +640,8 @@ fn printStackTrace(failure: *TestFailure) !void {
 }
 
 
-
-const zargs = @import("zargunaught");
+// Vendored argument parsing lib.
+const zargs = @import("lib/zargunaught.zig");
 const Option = zargs.Option;
 
 // Parses the command line for options and runs the passed in tests.
