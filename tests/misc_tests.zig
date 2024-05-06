@@ -13,9 +13,9 @@ pub fn alwaysFailTest() !void {
 
 pub fn successTest() !void {
     try testz.expectEqual(12, 12);
-    // try testz.expectEqual("hello", "hello");
+    try testz.expectEqualStr("hello", "hello");
     try testz.expectNotEqual(10, 20);
-    // try testz.expectNotEqualStr("hello", "world");
+    try testz.expectNotEqualStr("hello", "world");
     try testz.expectTrue(true);
     try testz.expectFalse(false);
 }
