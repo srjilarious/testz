@@ -666,14 +666,15 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
     const verbose = args.hasOption("verbose");
     const optPrintStackTrace = args.hasOption("stack_trace");
 
+    const filters = (if(args.positional.items.len > 0) blk: {
+        break :blk args.positional.items;
+    } else null);
+
     _ = try runTests(
         testsToRun,
         .{
             .verbose = verbose,
-            // .allowFilters = &[_][]const u8{
-            //     "misc", 
-            //     "successTest"
-            // },
+            .allowFilters = filters,
             .printStackTraceOnFail = optPrintStackTrace
         }
     );

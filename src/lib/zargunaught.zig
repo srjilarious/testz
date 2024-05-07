@@ -381,6 +381,12 @@ pub const ArgParser = struct {
             }
         }
 
+        // The rest of the arguments are positional.
+        while(parseText.len > 0) {
+            const posData = parseText.first.?.data;
+            try parseResult.positional.append(posData);
+            _ = parseText.popFirst();
+        }
         return parseResult;
     }
 };
@@ -390,19 +396,19 @@ pub const ArgParserResult = struct {
     currItemPos: usize,
     options: std.ArrayList(OptionResult),
     command: ?*Command,
-    positionalArgs: std.ArrayList([]const u8),
+    positional: std.ArrayList([]const u8),
 
     pub fn init(allocator: std.mem.Allocator) ArgParserResult {
         return .{ 
             .currItemPos = 0, 
             .options = std.ArrayList(OptionResult).init(allocator),
             .command = null,
-            .positionalArgs = std.ArrayList([]const u8).init(allocator) };
+            .positional = std.ArrayList([]const u8).init(allocator) };
     }
 
     pub fn deinit(self: *ArgParserResult) void {
         self.options.deinit();
-        self.positionalArgs.deinit();
+        self.positional.deinit();
     }
 
     pub fn hasOption(self: *ArgParserResult, name: []const u8) bool {
