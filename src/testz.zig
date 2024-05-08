@@ -23,6 +23,8 @@ pub const TestFuncInfo = struct {
 };
 
 // Unpacked information from Group, not counting the module.
+// This is stored along with each test, since that was much easier
+// to get working in comptime than creating a hierarchy of objects.
 pub const TestGroup = struct {
     name: ?[]const u8,
     tag: []const u8,
@@ -36,6 +38,7 @@ pub const Group = struct {
     mod: type
 };
 
+// A group as used at runtime.
 const TestFuncGroup = struct {
     name: []const u8,
     tests: std.ArrayList(TestFuncInfo),
@@ -313,6 +316,29 @@ fn printChars(ch: []const u8, num: usize) void {
     }
 }
 
+fn printTestTime(timeNs: u64) void {
+    std.debug.print(" (" ++ White, .{});
+
+    const timeNsFloat: f64 = @floatFromInt(timeNs);
+
+    // Seconds
+    if(timeNs > 1000_000_000) {
+        std.debug.print("{d:.2} secs", .{timeNsFloat / 1000_000_000.0}); 
+    }
+    // milliseconds
+    else if(timeNs > 1000_000) {
+        std.debug.print("{d:.2} ms", .{timeNsFloat / 1000_000.0}); 
+    }
+    // microseconds
+    else if (timeNs > 1000) {
+        std.debug.print("{d:.2} \u{03bc}s", .{timeNsFloat / 1000.0});
+    }
+    // nanoseconds.
+    else {
+        std.debug.print("{} ns", .{timeNs});
+    }
+    std.debug.print(Reset ++ ")", .{});
+}
 pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
     var alloc: std.mem.Allocator = undefined;
     if(opts.alloc != null) {
@@ -376,6 +402,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
     var testsPassed: u32 = 0;
     var testsFailed: u32 = 0;
     var testsSkipped: u32 = 0;
+    var totalTestTimeNs: u64 = 0;
 
     // Find the longest length name in the tests for formatting.
     var verboseLength: usize = 0;
@@ -414,6 +441,8 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
 
         // Run each of the tests for the group.
         for(group.tests.items) |f| {
+            const testStartTime = try std.time.Instant.now();
+
             testsRun += 1;
 
             const testPrintName = if(f.skip) f.name[5..] else f.name;
@@ -454,6 +483,15 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
                     std.debug.print(Green ++ "\u{22c5}" ++ Reset, .{});
                 }
             }
+
+            const testEndTime = try std.time.Instant.now();
+            const testAmountNs = testEndTime.since(testStartTime);
+
+            if(opts.verbose) {
+                printTestTime(testAmountNs);
+            }
+
+            totalTestTimeNs += testAmountNs;
         }
 
         if(opts.verbose and group.name.len > 0) {
@@ -478,11 +516,10 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         // }
     }
 
-    //std.debug.print(Green ++ "\nDone!\n\n" ++ Reset, .{});
     std.debug.print("\n\n" ++ White ++ "{} " ++ Green ++ "Passed" ++ Reset ++ ", " ++
         White ++ "{} " ++ Red ++ "Failed" ++ Reset ++ ", " ++
         White ++ "{} " ++ Yellow ++ "Skipped" ++ Reset ++ ", " ++
-        White ++ "{} " ++ Cyan ++ "Total Tests" ++ Reset ++ "\n\n", 
+        White ++ "{} " ++ Cyan ++ "Total Tests" ++ Reset, //"({})"\n\n", 
     .{ 
         testsPassed, 
         testsFailed, 
@@ -490,6 +527,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         testsRun 
     });
 
+    printTestTime(totalTestTimeNs);
     // Clean up the slice we created if we had filters.
     if(opts.allowFilters != null) {
         alloc.free(testsToRun);
