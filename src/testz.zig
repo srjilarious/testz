@@ -3,6 +3,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 const native_os = builtin.os.tag;
 
+const Printer = @import("./printer.zig").Printer;
+
 const DarkGray = "\x1b[90m";
 const Red = "\x1b[91m";
 const DarkGreen = "\x1b[32m";
@@ -62,7 +64,7 @@ pub const RunTestOpts = struct {
     allowFilters: ?[]const []const u8 = null,
     verbose: bool = false,
     printStackTraceOnFail: bool = true,
-    writer: ?OutputWriter = null,
+    writer: ?*Printer = null,
 };
 
 pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type) []const TestFuncInfo {
@@ -309,7 +311,7 @@ pub fn expectNotEqual(expected: anytype, actual: anytype) !void {
     try GlobalTestContext.?.expectNotEqual(expected, actual);
 }
 
-fn printChars(writer: anytype, ch: []const u8, num: usize) !void {
+fn printChars(writer: *Printer, ch: []const u8, num: usize) !void {
     var n = num;
     while (n > 0) {
         try writer.print("{s}", .{ch});
@@ -317,7 +319,7 @@ fn printChars(writer: anytype, ch: []const u8, num: usize) !void {
     }
 }
 
-fn printTestTime(writer: anytype, timeNs: u64) !void {
+fn printTestTime(writer: *Printer, timeNs: u64) !void {
     try writer.print(" (" ++ White, .{});
 
     const timeNsFloat: f64 = @floatFromInt(timeNs);
@@ -341,9 +343,6 @@ fn printTestTime(writer: anytype, timeNs: u64) !void {
     try writer.print(Reset ++ ")", .{});
 }
 
-const OutputWriter = std.io.BufferedWriter(4096, @TypeOf(std.io.getStdOut().writer()));
-const MyWriter = @TypeOf(OutputWriter.writer());
-
 pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
     var alloc: std.mem.Allocator = undefined;
     if(opts.alloc != null) {
@@ -355,15 +354,14 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
 
     GlobalTestContext = TestContext.init(alloc, opts.verbose, opts.printStackTraceOnFail);
 
-    var bufferedWriter: OutputWriter = undefined;
+    var writer: *Printer = undefined;
     if(opts.writer != null) {
-        bufferedWriter = opts.writer.?;
+        std.debug.print("Using passed in Printer.\n", .{});
+        writer = opts.writer.?;
     }
     else {
-        bufferedWriter = std.io.bufferedWriter(std.io.getStdOut().writer());
+        // writer = Printer.stdout();
     }
-
-    var writer = bufferedWriter.writer();
 
     // Filter on the list of tests based on provided tag filters.
     var testsToRun: []const TestFuncInfo = undefined;
@@ -452,7 +450,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             try writer.print(DarkGreen ++ "# ", .{});
             try printChars(writer, "-", verboseLength + 12 - 2);
             try writer.print(Reset, .{});
-            try bufferedWriter.flush();
+            try writer.flush();
         }
 
         // Run each of the tests for the group.
@@ -479,7 +477,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
 
             if(f.skip) {
                 try writer.print(Yellow ++ "\u{21b7}" ++ Reset, .{});
-                try bufferedWriter.flush();
+                try writer.flush();
                 testsSkipped += 1;
                 continue;
             }
@@ -509,7 +507,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             }
 
             totalTestTimeNs += testAmountNs;
-            try bufferedWriter.flush();
+            try writer.flush();
         }
 
         if(opts.verbose and group.name.len > 0) {
@@ -547,7 +545,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
 
     try printTestTime(writer, totalTestTimeNs);
 
-    try bufferedWriter.flush();
+    try writer.flush();
 
     // Clean up the slice we created if we had filters.
     if(opts.allowFilters != null) {
@@ -729,15 +727,21 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
         break :blk args.positional.items;
     } else null);
 
-    // var testOut = std.ArrayList(u8).init(std.heap.page_allocator);
-    // const testOutWriter = testOut.writer();
+    var memBuff = Printer.memory(std.heap.page_allocator);
+    // var stdOut = Printer.stdout();
     _ = try runTests(
         testsToRun,
         .{
             .verbose = verbose,
             .allowFilters = filters,
             .printStackTraceOnFail = optPrintStackTrace,
-            // .writer = testOutWriter,
+            .writer = &memBuff,
+            // .writer = &stdOut,
         }
     );
+
+    std.debug.print("Array size: {}", .{memBuff.array.array.items.len});
+    std.debug.print("---------------------\n", .{});
+    std.debug.print("{s}\n", .{memBuff.array.array.items});
+    std.debug.print("---------------------\n", .{});
 }
