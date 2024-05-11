@@ -62,6 +62,7 @@ pub const RunTestOpts = struct {
     allowFilters: ?[]const []const u8 = null,
     verbose: bool = false,
     printStackTraceOnFail: bool = true,
+    writer: ?OutputWriter = null,
 };
 
 pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type) []const TestFuncInfo {
@@ -308,37 +309,41 @@ pub fn expectNotEqual(expected: anytype, actual: anytype) !void {
     try GlobalTestContext.?.expectNotEqual(expected, actual);
 }
 
-fn printChars(ch: []const u8, num: usize) void {
+fn printChars(writer: anytype, ch: []const u8, num: usize) !void {
     var n = num;
     while (n > 0) {
-        std.debug.print("{s}", .{ch});
+        try writer.print("{s}", .{ch});
         n -= 1;
     }
 }
 
-fn printTestTime(timeNs: u64) void {
-    std.debug.print(" (" ++ White, .{});
+fn printTestTime(writer: anytype, timeNs: u64) !void {
+    try writer.print(" (" ++ White, .{});
 
     const timeNsFloat: f64 = @floatFromInt(timeNs);
 
     // Seconds
     if(timeNs > 1000_000_000) {
-        std.debug.print("{d:.2} secs", .{timeNsFloat / 1000_000_000.0}); 
+        try writer.print("{d: >6.2} secs", .{timeNsFloat / 1000_000_000.0}); 
     }
     // milliseconds
     else if(timeNs > 1000_000) {
-        std.debug.print("{d:.2} ms", .{timeNsFloat / 1000_000.0}); 
+        try writer.print("{d: >6.2} ms", .{timeNsFloat / 1000_000.0}); 
     }
     // microseconds
     else if (timeNs > 1000) {
-        std.debug.print("{d:.2} \u{03bc}s", .{timeNsFloat / 1000.0});
+        try writer.print("{d: >6.2} \u{03bc}s", .{timeNsFloat / 1000.0});
     }
     // nanoseconds.
     else {
-        std.debug.print("{} ns", .{timeNs});
+        try writer.print("{d: >6} ns", .{timeNs});
     }
-    std.debug.print(Reset ++ ")", .{});
+    try writer.print(Reset ++ ")", .{});
 }
+
+const OutputWriter = std.io.BufferedWriter(4096, @TypeOf(std.io.getStdOut().writer()));
+const MyWriter = @TypeOf(OutputWriter.writer());
+
 pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
     var alloc: std.mem.Allocator = undefined;
     if(opts.alloc != null) {
@@ -349,6 +354,16 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
     }
 
     GlobalTestContext = TestContext.init(alloc, opts.verbose, opts.printStackTraceOnFail);
+
+    var bufferedWriter: OutputWriter = undefined;
+    if(opts.writer != null) {
+        bufferedWriter = opts.writer.?;
+    }
+    else {
+        bufferedWriter = std.io.bufferedWriter(std.io.getStdOut().writer());
+    }
+
+    var writer = bufferedWriter.writer();
 
     // Filter on the list of tests based on provided tag filters.
     var testsToRun: []const TestFuncInfo = undefined;
@@ -396,7 +411,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         try group.tests.append(t);
     }
 
-    std.debug.print("\n", .{});
+    try writer.print("\n", .{});
 
     var testsRun: u32 = 0;
     var testsPassed: u32 = 0;
@@ -428,15 +443,16 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         if(opts.verbose and group.name.len > 0 and !std.mem.eql(u8, groupTag.?.*, "default")) {
             // Print top line of group banner, 12 is the num of chars in a verbose test print
             // regardless of name length.
-            std.debug.print(DarkGreen ++ "# ", .{});
-            printChars("-", verboseLength + 12 - 2);
-            std.debug.print(Reset ++ "\n", .{});
+            try writer.print(DarkGreen ++ "# ", .{});
+            try printChars(writer, "-", verboseLength + 12 - 2);
+            try writer.print(Reset ++ "\n", .{});
 
-            std.debug.print(DarkGreen ++ "# " ++ Green ++ "{s}\n", .{group.name});
+            try writer.print(DarkGreen ++ "# " ++ Green ++ "{s}\n", .{group.name});
 
-            std.debug.print(DarkGreen ++ "# ", .{});
-            printChars("-", verboseLength + 12 - 2);
-            std.debug.print(Reset, .{});
+            try writer.print(DarkGreen ++ "# ", .{});
+            try printChars(writer, "-", verboseLength + 12 - 2);
+            try writer.print(Reset, .{});
+            try bufferedWriter.flush();
         }
 
         // Run each of the tests for the group.
@@ -450,26 +466,27 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             GlobalTestContext.?.setCurrentTest(testPrintName);
             if (opts.verbose) {
                 if(f.skip) {
-                    std.debug.print("\nSkipping " ++ DarkGray ++ "{s}" ++ Reset ++ "..", 
+                    try writer.print("\nSkipping " ++ DarkGray ++ "{s}" ++ Reset ++ "..", 
                         .{testPrintName});
                 }
                 else {
-                    std.debug.print("\nRunning " ++ White ++ "{s}" ++ Reset ++ "...", 
+                    try writer.print("\nRunning " ++ White ++ "{s}" ++ Reset ++ "...", 
                         .{testPrintName});
                 }
                 const num = @min(verboseLength - testPrintName.len, 128);
-                printChars(".", num);
+                try printChars(writer, ".", num);
             }
 
             if(f.skip) {
-                std.debug.print(Yellow ++ "\u{21b7}" ++ Reset, .{});
+                try writer.print(Yellow ++ "\u{21b7}" ++ Reset, .{});
+                try bufferedWriter.flush();
                 testsSkipped += 1;
                 continue;
             }
 
             var errorCaught = false;
             f.func() catch {
-                std.debug.print(Red ++ "X" ++ Reset, .{});
+                try writer.print(Red ++ "X" ++ Reset, .{});
                 errorCaught = true;
                 testsFailed += 1;
             };
@@ -478,9 +495,9 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
                 testsPassed += 1;
 
                 if (opts.verbose) {
-                    std.debug.print(Green ++ "\u{2713}" ++ Reset, .{});
+                    try writer.print(Green ++ "\u{2713}" ++ Reset, .{});
                 } else {
-                    std.debug.print(Green ++ "\u{22c5}" ++ Reset, .{});
+                    try writer.print(Green ++ "\u{22c5}" ++ Reset, .{});
                 }
             }
 
@@ -488,23 +505,24 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             const testAmountNs = testEndTime.since(testStartTime);
 
             if(opts.verbose) {
-                printTestTime(testAmountNs);
+                try printTestTime(writer, testAmountNs);
             }
 
             totalTestTimeNs += testAmountNs;
+            try bufferedWriter.flush();
         }
 
         if(opts.verbose and group.name.len > 0) {
-            std.debug.print("\n\n", .{});
+            try writer.print("\n\n", .{});
         }
     }
 
     for(GlobalTestContext.?.failures.items) |failure| {
-        std.debug.print("\n" ++ Red ++ "FAIL " ++ Yellow ++ "{s}" ++ Reset, .{failure.testName});
+        try writer.print("\n" ++ Red ++ "FAIL " ++ Yellow ++ "{s}" ++ Reset, .{failure.testName});
         // if(opts.verbose) {
-            std.debug.print(": {?s}", .{failure.errorMessage});
+            try writer.print(": {?s}", .{failure.errorMessage});
             if(opts.printStackTraceOnFail) {
-                std.debug.print("{?s}\n", .{failure.stackTrace});
+                try writer.print("{?s}\n", .{failure.stackTrace});
             }
         // }
         // else {
@@ -516,7 +534,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         // }
     }
 
-    std.debug.print("\n\n" ++ White ++ "{} " ++ Green ++ "Passed" ++ Reset ++ ", " ++
+    try writer.print("\n\n" ++ White ++ "{} " ++ Green ++ "Passed" ++ Reset ++ ", " ++
         White ++ "{} " ++ Red ++ "Failed" ++ Reset ++ ", " ++
         White ++ "{} " ++ Yellow ++ "Skipped" ++ Reset ++ ", " ++
         White ++ "{} " ++ Cyan ++ "Total Tests" ++ Reset, //"({})"\n\n", 
@@ -527,7 +545,10 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         testsRun 
     });
 
-    printTestTime(totalTestTimeNs);
+    try printTestTime(writer, totalTestTimeNs);
+
+    try bufferedWriter.flush();
+
     // Clean up the slice we created if we had filters.
     if(opts.allowFilters != null) {
         alloc.free(testsToRun);
@@ -708,12 +729,15 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
         break :blk args.positional.items;
     } else null);
 
+    // var testOut = std.ArrayList(u8).init(std.heap.page_allocator);
+    // const testOutWriter = testOut.writer();
     _ = try runTests(
         testsToRun,
         .{
             .verbose = verbose,
             .allowFilters = filters,
-            .printStackTraceOnFail = optPrintStackTrace
+            .printStackTraceOnFail = optPrintStackTrace,
+            // .writer = testOutWriter,
         }
     );
 }
