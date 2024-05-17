@@ -67,6 +67,12 @@ pub const RunTestOpts = struct {
     writer: ?Printer = null,
 };
 
+pub const InfoOpts = struct {
+    alloc: ?std.mem.Allocator = null,
+    // verbose: bool = false,
+    writer: ?Printer = null,
+};
+
 pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type) []const TestFuncInfo {
 
     comptime var numTests: usize = 0;
@@ -343,6 +349,45 @@ fn printTestTime(writer: *Printer, timeNs: u64) !void {
     try writer.print(Reset ++ ")", .{});
 }
 
+
+/// Looks at the slice of tests and returns an owned slice of TestGroups
+/// which can be used to list the available filter tags, for example.
+pub fn getGroupList(tests: []const TestFuncInfo, opts: InfoOpts) ![]TestGroup
+{
+    var alloc: std.mem.Allocator = undefined;
+    if(opts.alloc != null) {
+        alloc = opts.alloc.?;
+    }
+    else {
+        alloc = std.heap.page_allocator;
+    }
+
+    var writer: Printer = undefined;
+    if(opts.writer != null) {
+        writer = opts.writer.?;
+    }
+    else {
+        writer = Printer.stdout();
+    }
+
+    var groupSeen = std.StringHashMap(bool).init(alloc);
+    defer groupSeen.deinit();
+
+    var groupList = std.ArrayList(TestGroup).init(alloc);
+    defer groupList.deinit();
+
+    for(tests) |t| {
+        if(!groupSeen.contains(t.group.tag)) {
+            try groupList.append(t.group);
+            try groupSeen.put(t.group.tag, true);
+        }
+    }
+
+    return groupList.toOwnedSlice();
+}
+
+/// Takes a slice of TestFuncInfo and runs them using the given options
+/// to handle filtering and how to display the results.
 pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
     var alloc: std.mem.Allocator = undefined;
     if(opts.alloc != null) {
@@ -701,7 +746,9 @@ fn printStackTrace(failure: *TestFailure) !void {
 const zargs = @import("lib/zargunaught.zig");
 const Option = zargs.Option;
 
-// Parses the command line for options and runs the passed in tests.
+/// A default test runner implementation that parses the command line for options and runs the passed in tests.
+/// It allows for verbose/non-verbose output, disabling printing stack traces and providing a list of
+/// filter tags to only run some tests.
 pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
     var parser = try zargs.ArgParser.init(
         std.heap.page_allocator, .{ 
@@ -710,6 +757,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
             .opts = &[_]Option{
                 Option{ .longName = "verbose", .shortName = "v", .description = "Verbose output", .maxNumParams = 0 },
                 Option{ .longName = "stack_trace", .shortName = "s", .description = "Print stack traces on errors", .maxNumParams = 0 },
+                Option{ .longName = "groups", .shortName = "g", .description = "Lists the groups if tests", .maxNumParams = 0 },
             } 
         });
     defer parser.deinit();
@@ -720,23 +768,39 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
     };
     defer args.deinit();
 
-    const verbose = args.hasOption("verbose");
-    const optPrintStackTrace = args.hasOption("stack_trace");
+    // List out the available group tags and names.
+    if(args.hasOption("groups")) {
+        var printer = Printer.stdout();
 
-    const filters = (if(args.positional.items.len > 0) blk: {
-        break :blk args.positional.items;
-    } else null);
-
-    // var memBuff = try Printer.memory(std.heap.page_allocator);
-    // defer memBuff.deinit();
-
-    _ = try runTests(
-        testsToRun,
-        .{
-            .verbose = verbose,
-            .allowFilters = filters,
-            .printStackTraceOnFail = optPrintStackTrace,
-            // .writer = memBuff,
+        const groups = try getGroupList(testsToRun, .{});
+        try printer.print("# Test groups:\n", .{});
+        for(groups) |g| {
+            try printer.print("{s}: {?s}\n", .{g.tag, g.name});
         }
-    );
+        try printer.flush();
+
+        std.heap.page_allocator.free(groups);
+    }
+    // Run the tests in this case.
+    else {
+        const verbose = args.hasOption("verbose");
+        const optPrintStackTrace = args.hasOption("stack_trace");
+
+        const filters = (if(args.positional.items.len > 0) blk: {
+            break :blk args.positional.items;
+        } else null);
+
+        // var memBuff = try Printer.memory(std.heap.page_allocator);
+        // defer memBuff.deinit();
+
+        _ = try runTests(
+            testsToRun,
+            .{
+                .verbose = verbose,
+                .allowFilters = filters,
+                .printStackTraceOnFail = optPrintStackTrace,
+                // .writer = memBuff,
+            }
+        );
+    }
 }
