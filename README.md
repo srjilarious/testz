@@ -1,5 +1,8 @@
 # Overview
 
+![Zig Version](https://img.shields.io/badge/Zig%20Version-0.13.0-%23f7a41d?logo=zig)
+![License](https://img.shields.io/badge/License-MIT-blue)
+
 Testz is a testing library for zig that provides some extra features compared to the built in unit testing.
 
 - Color output with both a verbose mode and non-verbose mode
