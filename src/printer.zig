@@ -59,4 +59,6 @@ pub const Printer = union(enum) {
             .file => |_| try self.file.bufferWriter.flush(),
         }
     }
+
+
 };
