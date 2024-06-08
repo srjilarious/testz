@@ -1,7 +1,8 @@
 # Overview
 
-![Zig Version](https://img.shields.io/badge/Zig%20Version-0.13.0-%23f7a41d?logo=zig)
-![License](https://img.shields.io/badge/License-MIT-blue)
+![Version Badge](https://img.shields.io/badge/Version-0.5.1-brightgreen)
+![Zig Version Badge](https://img.shields.io/badge/Zig%20Version-0.13.0-%23f7a41d?logo=zig)
+![License Badge](https://img.shields.io/badge/License-MIT-blue)
 
 Testz is a testing library for zig that provides some extra features compared to the built in unit testing.
 
@@ -33,7 +34,7 @@ Here's an example from `testz` itself showing verbose output with a number of te
 
 Here's what a module of tests looks like:
 
-```
+```zig
 const std = @import("std");
 const testz = @import("testz");
 
@@ -87,20 +88,21 @@ The function `testsz.discoverTests`, takes a tuple of either direct module `@imp
 
 In your `build.zig`, you would have something like (assuming the library is pulled in from your `build.zig.zon`):
 
-```
+```zig
     const testzMod = b.dependency("testz", .{});
     [...]
     exe.root_module.addImport("testz", testzMod.module("testz"));
 ```
 
 Where the middle portion is the standard exe setup, so the full thing would look like:
-```
+
+```zig
   const testzMod = b.dependency("testz", .{});
   const exe = b.addExecutable(.{
         .name = "unit_tests",
         // In this case the main source file is merely a path, however, in more
         // complicated build scripts, this could be a generated file.
-        .root_source_file = .{ .path = "tests/main.zig" },
+        .root_source_file = b.path("tests/main.zig") },
         .target = target,
         .optimize = optimize,
     });
@@ -140,8 +142,6 @@ Where the middle portion is the standard exe setup, so the full thing would look
 The library is already usable, but does have some features that are not yet implemented.  As it develops I make well change the formatting output as well, although a goal is to make writing your own test runner with custom formatting a mostly trivial exercise.
 
 ### Roadmap / Ideas
-[ ] Change to using `io.Writer` rather than `std.debug.print` directly.
-[ ] Add no-color option, check for tty before outputting colors.
-[ ] Capture number of assertions in each test
-[ ] Capture time of each test, group of tests and overall.
+- [ ] Add no-color option, check for tty before outputting colors.
+- [ ] Capture number of assertions in each test
 
