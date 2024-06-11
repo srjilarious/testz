@@ -391,14 +391,14 @@ pub fn getGroupList(tests: []const TestFuncInfo, opts: InfoOpts) ![]TestGroup
         alloc = std.heap.page_allocator;
     }
 
-    var writer: Printer = undefined;
-    if(opts.writer != null) {
-        writer = opts.writer.?;
-    }
-    else {
-        writer = Printer.stdout();
-    }
-
+    // var writer: Printer = undefined;
+    // if(opts.writer != null) {
+    //     writer = opts.writer.?;
+    // }
+    // else {
+    //     writer = Printer.stdout();
+    // }
+    //
     var groupSeen = std.StringHashMap(bool).init(alloc);
     defer groupSeen.deinit();
 
@@ -429,11 +429,13 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
     GlobalTestContext = TestContext.init(alloc, opts.verbose, opts.printStackTraceOnFail);
 
     var writer: Printer = undefined;
+    var usingDefaultWriter: bool = false;
     if(opts.writer != null) {
         writer = opts.writer.?;
     }
     else {
-        writer = Printer.stdout();
+        writer = try Printer.stdout(alloc);
+        usingDefaultWriter = true;
     }
 
     // Filter on the list of tests based on provided tag filters.
@@ -626,6 +628,10 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         alloc.free(testsToRun);
     }
 
+    if(usingDefaultWriter) {
+        writer.deinit();
+    }
+
     // Fix me.
     // GlobalTestContext.?.deinit();
 
@@ -800,7 +806,8 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
 
     // List out the available group tags and names.
     if(args.hasOption("groups")) {
-        var printer = Printer.stdout();
+        var printer = try Printer.stdout(std.heap.page_allocator);
+        defer printer.deinit();
 
         const groups = try getGroupList(testsToRun, .{});
         try printer.print("# Test groups:\n", .{});
