@@ -1,7 +1,7 @@
 const std = @import("std");
 const testz = @import("testz");
 
-pub fn allowNonTestzErrorsTest() !void {
+pub fn allowNonTestzErrors() !void {
     const mem = try std.heap.page_allocator.alloc(u8, 10);
     defer std.heap.page_allocator.free(mem);
     try testz.expectEqual(true, true);
@@ -20,6 +20,6 @@ pub fn successTest() !void {
     try testz.expectFalse(false);
 }
 
-pub fn skip_Test() !void {
+pub fn skip_notReadyTest() !void {
     // nothing to see here.
 }

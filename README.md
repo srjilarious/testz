@@ -1,6 +1,6 @@
 # Overview
 
-![Version Badge](https://img.shields.io/badge/Version-0.5.1-brightgreen)
+![Version Badge](https://img.shields.io/badge/Version-0.5.2-brightgreen)
 ![Zig Version Badge](https://img.shields.io/badge/Zig%20Version-0.13.0-%23f7a41d?logo=zig)
 ![License Badge](https://img.shields.io/badge/License-MIT-blue)
 
@@ -143,5 +143,6 @@ The library is already usable, but does have some features that are not yet impl
 
 ### Roadmap / Ideas
 - [ ] Add no-color option, check for tty before outputting colors.
+- [ ] Debugging flag to print out each function evaluated for to handle it as a test or not.
 - [ ] Capture number of assertions in each test
 

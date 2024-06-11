@@ -73,7 +73,7 @@ pub const InfoOpts = struct {
     writer: ?Printer = null,
 };
 
-pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type) []const TestFuncInfo {
+pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type, opts: DiscoverOpts) []const TestFuncInfo {
 
     comptime var numTests: usize = 0;
     const decls = @typeInfo(mod).Struct.decls;
@@ -81,7 +81,10 @@ pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type) 
         const fld = @field(mod, decl.name);
         const ti = @typeInfo(@TypeOf(fld));
         if (ti == .Fn) {
-            if (std.mem.endsWith(u8, decl.name, "Test")) {
+            if (opts.testsEndWithTest and std.mem.endsWith(u8, decl.name, "Test")) {
+                numTests += 1;
+            }
+            else {
                 numTests += 1;
             }
         }
@@ -93,8 +96,25 @@ pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type) 
         const fld = @field(mod, decl.name);
         const ti = @typeInfo(@TypeOf(fld));
         if (ti == .Fn) {
-            if (std.mem.endsWith(u8, decl.name, "Test")) {
+            if(opts.debugDiscovery) {
+                @compileLog("Evaluating function:", decl.name);
+            }
+
+            var isTest: bool = true;
+            if (opts.testsEndWithTest and !std.mem.endsWith(u8, decl.name, "Test")) {
+                if(opts.debugDiscovery) {
+                    @compileLog("Not running {} as a test since its name doesn't end with `Test`", .{decl.name});
+                }
+
+                isTest = false;
+            }
+
+            if(isTest) {
                 const skip = std.mem.startsWith(u8, decl.name, "skip_");
+                if(skip and opts.debugDiscovery) {
+                    @compileLog("Function {} will be skipped since it starts with `_skip`", .{decl.name});
+                }
+
                 tests[idx] = .{ 
                     .func = fld, 
                     .name = decl.name,
@@ -110,7 +130,16 @@ pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type) 
     return &final;
 }
 
-pub fn discoverTests(comptime mods: anytype) []const TestFuncInfo {
+pub const DiscoverOpts = struct {
+    // If set true, only public functions ending with `Test` are considered.
+    testsEndWithTest: bool = false,
+
+    // If true, will log at compile time all of the functions seen and the result
+    // of how it is categorized.
+    debugDiscovery: bool = false,
+};
+
+pub fn discoverTests(comptime mods: anytype, opts: DiscoverOpts) []const TestFuncInfo {
     const MaxTests = 10000;
     comptime var tests: [MaxTests]TestFuncInfo = undefined;
     comptime var totalTests: usize = 0;
@@ -147,7 +176,7 @@ pub fn discoverTests(comptime mods: anytype) []const TestFuncInfo {
             }
         };
 
-        const modTests = discoverTestsInModule(currGroup, currMod);
+        const modTests = discoverTestsInModule(currGroup, currMod, opts);
         for (modTests) |t| {
             tests[totalTests] = t;
             totalTests += 1;
@@ -236,7 +265,7 @@ pub const TestContext = struct {
     }
 
     fn failWith(self: *TestContext, err: anytype) !void {
-        try self.handleTestError("Test hit failure point: {}", .{err});
+        try self.handleTestError("Test hit failure point: {s}", .{err});
         return error.TestFailed;
     }
 
@@ -481,7 +510,8 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
 
         // Clean up the group test memory once done iterating
         defer group.deinit();
-        
+
+        // Print out the name of the current group unless it's the default one.
         if(opts.verbose and group.name.len > 0 and !std.mem.eql(u8, groupTag.?.*, "default")) {
             // Print top line of group banner, 12 is the num of chars in a verbose test print
             // regardless of name length.
@@ -504,7 +534,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             testsRun += 1;
 
             const testPrintName = if(f.skip) f.name[5..] else f.name;
-            
+
             GlobalTestContext.?.setCurrentTest(testPrintName);
             if (opts.verbose) {
                 if(f.skip) {
