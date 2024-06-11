@@ -25,7 +25,7 @@ const LocalExampleTests = struct {
 const Tests = testz.discoverTests(.{
     // Rather than a local struct, we could simply import a module with these top-level functions.
     testz.Group{ .name = "Example tests", .tag = "example", .mod = LocalExampleTests },
-});
+}, .{});
 
 pub fn main() !void {
     try testz.testzRunner(Tests);
