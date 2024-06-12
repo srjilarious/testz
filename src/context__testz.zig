@@ -22,14 +22,16 @@ pub const TestContext = struct {
     alloc: std.mem.Allocator,
     verbose: bool,
     printStackTraceOnFail: bool,
+    printColor: bool,
     currTestName: ?[]const u8,
 
-    pub fn init(alloc: std.mem.Allocator, verbose: bool, printStackTraceOnFail: bool) TestContext {
+    pub fn init(alloc: std.mem.Allocator, verbose: bool, printStackTraceOnFail: bool, printColor: bool) TestContext {
         return .{
             .failures = std.ArrayList(TestFailure).init(alloc),
             .alloc = alloc,
             .verbose = verbose,
             .printStackTraceOnFail = printStackTraceOnFail,
+            .printColor = printColor,
             .currTestName = null,
         };
     }
@@ -59,7 +61,7 @@ pub const TestContext = struct {
         var err = try TestFailure.init(self.currTestName.?, self.alloc);
         err.errorMessage = try formatOwnedSliceMessage(self.alloc, fmt, params);
         if (self.printStackTraceOnFail) {
-            try printStackTrace(&err);
+            try printStackTrace(&err, self.printColor);
         }
 
         try self.failures.append(err);
@@ -71,48 +73,77 @@ pub const TestContext = struct {
     }
 
     pub fn failWith(self: *TestContext, err: anytype) !void {
-        try self.handleTestError("Test hit failure point: {s}", .{err});
+        if (self.printColor) {
+            try self.handleTestError("Test hit failure point: " ++ White ++ "{any}" ++ Reset, .{err});
+        } else {
+            try self.handleTestError("Test hit failure point: {any}", .{err});
+        }
+
         return error.TestFailed;
     }
 
     pub fn expectTrue(self: *TestContext, actual: bool) !void {
         if (actual != true) {
-            try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to be true" ++ Reset, .{actual});
+            if (self.printColor) {
+                try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to be true" ++ Reset, .{actual});
+            } else {
+                try self.handleTestError("Expected {} to be true", .{actual});
+            }
             return error.TestExpectedTrue;
         }
     }
 
     pub fn expectFalse(self: *TestContext, actual: bool) !void {
         if (actual == true) {
-            try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to be false " ++ Reset, .{actual});
+            if (self.printColor) {
+                try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to be false " ++ Reset, .{actual});
+            } else {
+                try self.handleTestError("Expected {} to be false ", .{actual});
+            }
             return error.TestExpectedFalse;
         }
     }
 
     pub fn expectEqualStr(self: *TestContext, expected: []const u8, actual: []const u8) !void {
         if (std.mem.eql(u8, expected, actual) == false) {
-            try self.handleTestError("Expected " ++ White ++ "{s}" ++ Reset ++ " to be {s} " ++ Reset, .{ actual, expected });
+            if (self.printColor) {
+                try self.handleTestError("Expected " ++ White ++ "{s}" ++ Reset ++ " to be {s} " ++ Reset, .{ actual, expected });
+            } else {
+                try self.handleTestError("Expected {s} to be {s} ", .{ actual, expected });
+            }
             return error.TestExpectedEqual;
         }
     }
 
     pub fn expectEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
         if (expected != actual) {
-            try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to be {} " ++ Reset, .{ actual, expected });
+            if (self.printColor) {
+                try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to be {} " ++ Reset, .{ actual, expected });
+            } else {
+                try self.handleTestError("Expected {} to be {} ", .{ actual, expected });
+            }
             return error.TestExpectedEqual;
         }
     }
 
     pub fn expectNotEqualStr(self: *TestContext, expected: []const u8, actual: []const u8) !void {
         if (std.mem.eql(u8, expected, actual) == true) {
-            try self.handleTestError("Expected " ++ White ++ "{s}" ++ Reset ++ " to NOT be {s} " ++ Reset, .{ actual, expected });
+            if (self.printColor) {
+                try self.handleTestError("Expected " ++ White ++ "{s}" ++ Reset ++ " to NOT be {s} " ++ Reset, .{ actual, expected });
+            } else {
+                try self.handleTestError("Expected {s} to NOT be {s} ", .{ actual, expected });
+            }
             return error.TestExpectedNotEqual;
         }
     }
 
     pub fn expectNotEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
         if (expected == actual) {
-            try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to NOT be {} " ++ Reset, .{ actual, expected });
+            if (self.printColor) {
+                try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to NOT be {} " ++ Reset, .{ actual, expected });
+            } else {
+                try self.handleTestError("Expected {} to NOT be {}", .{ actual, expected });
+            }
             return error.TestExpectedNotEqual;
         }
     }
@@ -122,7 +153,7 @@ pub const TestContext = struct {
 // Stack tracing helpers
 // Code mostly pulled from std.debug directly.
 // ----------------------------------------------------------------------------
-fn printLinesFromFileAnyOs(out_stream: anytype, line_info: std.debug.LineInfo, context_amount: u64) !void {
+fn printLinesFromFileAnyOs(out_stream: anytype, line_info: std.debug.LineInfo, context_amount: u64, printColor: bool) !void {
     // Need this to always block even in async I/O mode, because this could potentially
     // be called from e.g. the event loop code crashing.
     var f = try std.fs.cwd().openFile(line_info.file_name, .{});
@@ -153,11 +184,19 @@ fn printLinesFromFileAnyOs(out_stream: anytype, line_info: std.debug.LineInfo, c
             if (byte == '\n') {
                 line += 1;
                 if (line >= min_line and line <= max_line) {
-                    try std.fmt.format(out_stream, White ++ "{d: >5}", .{line});
-                    if (line == line_info.line) {
-                        _ = try out_stream.write(" --> " ++ Reset);
+                    if (printColor) {
+                        try std.fmt.format(out_stream, White ++ "{d: >5}", .{line});
                     } else {
-                        _ = try out_stream.write("     " ++ Reset);
+                        try std.fmt.format(out_stream, "{d: >5}", .{line});
+                    }
+                    if (line == line_info.line) {
+                        _ = try out_stream.write(" --> ");
+                    } else {
+                        _ = try out_stream.write("     ");
+                    }
+
+                    if (printColor) {
+                        _ = try out_stream.write(Reset);
                     }
                 }
                 column = 1;
@@ -175,7 +214,7 @@ fn printLinesFromFileAnyOs(out_stream: anytype, line_info: std.debug.LineInfo, c
 // A stack trace printing function, using mostly code from std.debug
 // Modified to print out more context from the file and add some
 // extra highlighting.
-fn printStackTrace(failure: *TestFailure) !void {
+fn printStackTrace(failure: *TestFailure, printColor: bool) !void {
     const stderr = std.io.getStdErr().writer();
     if (builtin.strip_debug_info) {
         stderr.print("Unable to dump stack trace: debug info stripped\n", .{}) catch return;
@@ -225,12 +264,17 @@ fn printStackTrace(failure: *TestFailure) !void {
         if (line_info) |*li| {
 
             // Skip printing frames within the framework.
-            if (std.mem.endsWith(u8, li.file_name, "testz.zig")) continue;
+            if (std.mem.endsWith(u8, li.file_name, "__testz.zig")) continue;
+            if (std.mem.endsWith(u8, li.file_name, "/testz.zig")) continue;
             // Skip over the call to runTests, assuming it's in `main`
             if (std.mem.eql(u8, symbol_info.symbol_name, "main")) continue;
 
             // std.debug.print("*** Symbol: {s}, {s}\n", .{symbol_info.symbol_name, symbol_info.compile_unit_name});
-            try std.fmt.format(out_stream, "\n{s}:" ++ White ++ "{d}" ++ Reset ++ ":{d}:\n", .{ li.file_name, li.line, li.column });
+            if (printColor) {
+                try std.fmt.format(out_stream, "\n{s}:" ++ White ++ "{d}" ++ Reset ++ ":{d}:\n", .{ li.file_name, li.line, li.column });
+            } else {
+                try std.fmt.format(out_stream, "\n{s}:{d}:{d}:\n", .{ li.file_name, li.line, li.column });
+            }
 
             if (first) {
                 failure.lineNo = li.line;
@@ -243,7 +287,7 @@ fn printStackTrace(failure: *TestFailure) !void {
         // try stderr.print(" 0x{x} in {s} ({s})\n\n", .{ return_address, symbol_info.symbol_name, symbol_info.compile_unit_name });
 
         if (line_info) |li| {
-            try printLinesFromFileAnyOs(out_stream, li, 3);
+            try printLinesFromFileAnyOs(out_stream, li, 3, printColor);
         }
     }
 

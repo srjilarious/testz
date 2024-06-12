@@ -17,8 +17,8 @@ pub const ParseError = error{UnknownOption};
 
 pub const Option = struct {
     longName: []const u8,
-    shortName: []const u8,
-    description: []const u8,
+    shortName: []const u8 = "",
+    description: []const u8 = "",
     maxNumParams: i8 = 0,
 };
 

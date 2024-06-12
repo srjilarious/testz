@@ -12,7 +12,7 @@ pub const Group = core.Group;
 const TestFuncGroup = core.TestFuncGroup;
 const TestFuncMap = core.TestFuncMap;
 
-const TestContext = @import("./context.zig").TestContext;
+const TestContext = @import("./context__testz.zig").TestContext;
 
 const discovery = @import("./discovery.zig");
 pub const discoverTests = discovery.discoverTests;
@@ -33,6 +33,7 @@ pub const RunTestOpts = struct {
     allowFilters: ?[]const []const u8 = null,
     verbose: bool = false,
     printStackTraceOnFail: bool = true,
+    printColor: bool = true,
     writer: ?Printer = null,
 };
 
@@ -86,8 +87,9 @@ fn printChars(writer: *Printer, ch: []const u8, num: usize) !void {
     }
 }
 
-fn printTestTime(writer: *Printer, timeNs: u64) !void {
-    try writer.print(" (" ++ White, .{});
+fn printTestTime(writer: *Printer, timeNs: u64, printColor: bool) !void {
+    try writer.print(" (", .{});
+    if(printColor) try writer.print(White, .{});
 
     const timeNsFloat: f64 = @floatFromInt(timeNs);
 
@@ -107,9 +109,22 @@ fn printTestTime(writer: *Printer, timeNs: u64) !void {
     else {
         try writer.print("{d: >6} ns", .{timeNs});
     }
-    try writer.print(Reset ++ ")", .{});
+
+    if(printColor) try writer.print(Reset, .{});
+    try writer.print(")", .{});
 }
 
+fn printGroupSeparatorLine(writer: *Printer, maxTestNameLength: usize, printColor: bool) !void {
+     // Print top line of group banner, 21 is the num of chars in a verbose test print
+    // regardless of name length.
+    if(printColor) try writer.print(DarkGreen, .{});
+
+    try writer.print("# ", .{});
+    try printChars(writer, "-", maxTestNameLength + 24 - 2);
+
+    if(printColor) try writer.print(Reset, .{});
+    // 
+}
 
 /// Looks at the slice of tests and returns an owned slice of TestGroups
 /// which can be used to list the available filter tags, for example.
@@ -150,7 +165,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         alloc = std.heap.page_allocator;
     }
 
-    GlobalTestContext = TestContext.init(alloc, opts.verbose, opts.printStackTraceOnFail);
+    GlobalTestContext = TestContext.init(alloc, opts.verbose, opts.printStackTraceOnFail, opts.printColor);
 
     var writer: Printer = undefined;
     var usingDefaultWriter: bool = false;
@@ -239,17 +254,16 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
 
         // Print out the name of the current group unless it's the default one.
         if(opts.verbose and group.name.len > 0 and !std.mem.eql(u8, groupTag.?.*, "default")) {
-            // Print top line of group banner, 12 is the num of chars in a verbose test print
-            // regardless of name length.
-            try writer.print(DarkGreen ++ "# ", .{});
-            try printChars(&writer, "-", verboseLength + 12 - 2);
-            try writer.print(Reset ++ "\n", .{});
+            try printGroupSeparatorLine(&writer, verboseLength, opts.printColor);
+           
+            try writer.print("\n", .{});
+            if(opts.printColor) try writer.print(DarkGreen, .{});
+            try writer.print("# ", .{});
 
-            try writer.print(DarkGreen ++ "# " ++ Green ++ "{s}\n", .{group.name});
+            if(opts.printColor) try writer.print(Green, .{});
+            try writer.print("{s}\n", .{group.name});
 
-            try writer.print(DarkGreen ++ "# ", .{});
-            try printChars(&writer, "-", verboseLength + 12 - 2);
-            try writer.print(Reset, .{});
+            try printGroupSeparatorLine(&writer, verboseLength, opts.printColor);
             try writer.flush();
         }
 
@@ -264,46 +278,63 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             GlobalTestContext.?.setCurrentTest(testPrintName);
             if (opts.verbose) {
                 if(f.skip) {
-                    try writer.print("\nSkipping " ++ DarkGray ++ "{s}" ++ Reset ++ "..", 
-                        .{testPrintName});
+                    try writer.print("\nSkipping ", .{});
+                    if(opts.printColor) try writer.print(DarkGray, .{});
+                    try writer.print("{s}", .{testPrintName});
+                    if(opts.printColor) try writer.print(Reset, .{});
+                    try writer.print("..",  .{});
                 }
                 else {
-                    try writer.print("\nRunning " ++ White ++ "{s}" ++ Reset ++ "...", 
-                        .{testPrintName});
+                    try writer.print("\nRunning ", .{});
+                    if(opts.printColor) try writer.print(White, .{});
+                    try writer.print("{s}", .{testPrintName});
+                    if(opts.printColor) try writer.print(Reset, .{});
+                    try writer.print("...",  .{});
                 }
                 const num = @min(verboseLength - testPrintName.len, 128);
                 try printChars(&writer, ".", num);
             }
 
+            // If we are skipping this test, print a jump over arrow.
             if(f.skip) {
-                try writer.print(Yellow ++ "\u{21b7}" ++ Reset, .{});
-                try writer.flush();
+                if(opts.printColor) try writer.print(Yellow, .{});
+                try writer.print("\u{21b7}", .{});
+                if(opts.printColor) try writer.print(Reset, .{});
                 testsSkipped += 1;
                 continue;
             }
 
             var errorCaught = false;
             f.func() catch {
-                try writer.print(Red ++ "X" ++ Reset, .{});
+
+                // Print an `X` on test failure.
+                if(opts.printColor) try writer.print(Red, .{});
+                try writer.print("X", .{});
+                if(opts.printColor) try writer.print(Reset, .{});
                 errorCaught = true;
                 testsFailed += 1;
             };
 
+            // If we passed, print a dot in non-verbose mode and a check-mark in verbose.
             if(!errorCaught) {
                 testsPassed += 1;
 
+                if(opts.printColor) try writer.print(Green , .{});
+
                 if (opts.verbose) {
-                    try writer.print(Green ++ "\u{2713}" ++ Reset, .{});
+                    try writer.print("\u{2713}", .{});
                 } else {
-                    try writer.print(Green ++ "\u{22c5}" ++ Reset, .{});
+                    try writer.print("\u{22c5}", .{});
                 }
+                
+                if(opts.printColor) try writer.print(Reset, .{});
             }
 
             const testEndTime = try std.time.Instant.now();
             const testAmountNs = testEndTime.since(testStartTime);
 
             if(opts.verbose) {
-                try printTestTime(&writer, testAmountNs);
+                try printTestTime(&writer, testAmountNs, opts.printColor);
             }
 
             totalTestTimeNs += testAmountNs;
@@ -316,35 +347,42 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
     }
 
     for(GlobalTestContext.?.failures.items) |failure| {
-        try writer.print("\n" ++ Red ++ "FAIL " ++ Yellow ++ "{s}" ++ Reset, .{failure.testName});
-        // if(opts.verbose) {
-            try writer.print(": {?s}", .{failure.errorMessage});
-            if(opts.printStackTraceOnFail) {
-                try writer.print("{?s}\n", .{failure.stackTrace});
+        if(opts.printColor) {
+            try writer.print("\n" ++ Red ++ "FAIL " ++ Yellow ++ "{s}" ++ Reset, .{failure.testName});
+        }
+        else {
+            try writer.print("\nFAIL {s}", .{failure.testName});
+        }
+        try writer.print(": {?s}", .{failure.errorMessage});
+        if(opts.printStackTraceOnFail) {
+            try writer.print("{?s}\n", .{failure.stackTrace});
+        }
             }
-        // }
-        // else {
-            // if(opts.printStackTraceOnFail) {
-            //     // Try to roughly align the lines to the end of the bottom status report.
-            //     printChars(" ", @max(30, verboseLength) - failure.testName.len);
-            //     std.debug.print("   line {}", .{failure.lineNo});
-            // }
-        // }
+
+    if(opts.printColor) {
+        try writer.print("\n\n" ++ White ++ "{} " ++ Green ++ "Passed" ++ Reset ++ ", " ++
+            White ++ "{} " ++ Red ++ "Failed" ++ Reset ++ ", " ++
+            White ++ "{} " ++ Yellow ++ "Skipped" ++ Reset ++ ", " ++
+            White ++ "{} " ++ Cyan ++ "Total Tests" ++ Reset, //"({})"\n\n", 
+        .{ 
+            testsPassed, 
+            testsFailed, 
+            testsSkipped,
+            testsRun 
+        });
+    }
+    else {
+        try writer.print("\n\n{} Passed, {} Failed, {} Skipped, {} Total Tests", 
+        .{ 
+            testsPassed, 
+            testsFailed, 
+            testsSkipped,
+            testsRun 
+        });
     }
 
-    try writer.print("\n\n" ++ White ++ "{} " ++ Green ++ "Passed" ++ Reset ++ ", " ++
-        White ++ "{} " ++ Red ++ "Failed" ++ Reset ++ ", " ++
-        White ++ "{} " ++ Yellow ++ "Skipped" ++ Reset ++ ", " ++
-        White ++ "{} " ++ Cyan ++ "Total Tests" ++ Reset, //"({})"\n\n", 
-    .{ 
-        testsPassed, 
-        testsFailed, 
-        testsSkipped,
-        testsRun 
-    });
-
-    try printTestTime(&writer, totalTestTimeNs);
-
+    try printTestTime(&writer, totalTestTimeNs, opts.printColor);
+    try writer.print("\n", .{});
     try writer.flush();
 
     // Clean up the slice we created if we had filters.
@@ -380,7 +418,8 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
             .opts = &[_]Option{
                 Option{ .longName = "verbose", .shortName = "v", .description = "Verbose output", .maxNumParams = 0 },
                 Option{ .longName = "stack_trace", .shortName = "s", .description = "Print stack traces on errors", .maxNumParams = 0 },
-                Option{ .longName = "groups", .shortName = "g", .description = "Lists the groups if tests", .maxNumParams = 0 },
+                Option{ .longName = "groups", .shortName = "g", .description = "Lists the groups of tests", .maxNumParams = 0 },
+                Option{ .longName = "no-color", .description = "Disables color output", .maxNumParams = 0 },
             } 
         });
     defer parser.deinit();
@@ -409,6 +448,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
     else {
         const verbose = args.hasOption("verbose");
         const optPrintStackTrace = args.hasOption("stack_trace");
+        const optPrintNoColor = args.hasOption("no-color");
 
         const filters = (if(args.positional.items.len > 0) blk: {
             break :blk args.positional.items;
@@ -423,6 +463,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
                 .verbose = verbose,
                 .allowFilters = filters,
                 .printStackTraceOnFail = optPrintStackTrace,
+                .printColor = !optPrintNoColor,
                 // .writer = memBuff,
             }
         );
