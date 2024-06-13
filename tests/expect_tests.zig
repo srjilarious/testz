@@ -1,5 +1,10 @@
 const std = @import("std");
 const testz = @import("testz");
+const TestFunc = testz.TestFunc;
+
+// fn runInternalTest(func: TestFunc) !void {
+//     testz.runTests(.{ func }, .{});
+// }
 
 pub fn expectEqualFailTest() !void {
     try testz.expectEqual(10, 20);

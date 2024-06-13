@@ -35,6 +35,7 @@ pub const RunTestOpts = struct {
     printStackTraceOnFail: bool = true,
     printColor: bool = true,
     writer: ?Printer = null,
+    testContext: ?*TestContext = null,
 };
 
 pub const InfoOpts = struct {
@@ -45,7 +46,41 @@ pub const InfoOpts = struct {
 
 
 
-var GlobalTestContext: ?TestContext = null;
+var GlobalTestContext: ?*TestContext = null;
+var TestContexts: ?std.ArrayList(*TestContext) = null;
+
+pub fn pushTestContext(context: *TestContext, opts: struct { alloc: ?std.mem.Allocator=null }) !void {
+
+    var alloc: std.mem.Allocator = undefined;
+    if(opts.alloc != null) {
+        alloc = opts.alloc.?;
+    }
+    else {
+        alloc = std.heap.page_allocator;
+    }
+
+    if(TestContexts == null) {
+        TestContexts = std.ArrayList(*TestContext).init(alloc);
+    }
+
+    if(GlobalTestContext == null) {
+        GlobalTestContext = context;
+    }
+    else {
+        // Push the current Global TestContext onto our stack.
+        try TestContexts.?.append(GlobalTestContext.?);
+        GlobalTestContext = context;
+    }
+}
+
+pub fn popTestContext() void {
+    if(TestContexts != null and TestContexts.?.items.len > 0) {
+       GlobalTestContext = TestContexts.?.pop();
+    }
+    else {
+        GlobalTestContext = null;
+    }
+}
 
 pub fn fail() !void {
     try GlobalTestContext.?.fail();
@@ -154,6 +189,14 @@ pub fn getGroupList(tests: []const TestFuncInfo, opts: InfoOpts) ![]TestGroup
     return groupList.toOwnedSlice();
 }
 
+fn pushGivenContext(givenContext: *TestContext, alloc: std.mem.Allocator, opts: RunTestOpts) !void
+{
+    givenContext.verbose = opts.verbose;
+    givenContext.printStackTraceOnFail = opts.printStackTraceOnFail;
+    givenContext.printColor = !opts.printColor;
+    try pushTestContext(givenContext, .{ .alloc = alloc });
+}
+
 /// Takes a slice of TestFuncInfo and runs them using the given options
 /// to handle filtering and how to display the results.
 pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
@@ -165,7 +208,27 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         alloc = std.heap.page_allocator;
     }
 
-    GlobalTestContext = TestContext.init(alloc, opts.verbose, opts.printStackTraceOnFail, opts.printColor);
+    // Handle a potential passed in test context to use and 
+    // create a global context if one doesn't exist already.
+    var createdOwnContext: bool = false;
+    if(GlobalTestContext == null) {
+        if(opts.testContext != null) {
+            try pushGivenContext(opts.testContext.?, alloc, opts);
+        }
+        else {
+            // Create a global context by pushing one, we'll clean this up at
+            // the end of runTests.
+            const newContext = try alloc.create(TestContext);
+            newContext.* = TestContext.init(alloc, opts.verbose, opts.printStackTraceOnFail, opts.printColor);
+            try pushTestContext(newContext, .{ .alloc = alloc });
+            createdOwnContext = true;
+        }
+    }
+    else {
+        if(opts.testContext != null) {
+            try pushGivenContext(opts.testContext.?, alloc, opts);
+        }
+    }
 
     var writer: Printer = undefined;
     var usingDefaultWriter: bool = false;
@@ -394,8 +457,12 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         writer.deinit();
     }
 
-    // Fix me.
-    // GlobalTestContext.?.deinit();
+    if(createdOwnContext) {
+        const gtcAlloc = GlobalTestContext.?.alloc;
+        GlobalTestContext.?.deinit();
+        gtcAlloc.destroy(GlobalTestContext.?);
+        popTestContext();
+    }
 
     return testsFailed == 0;
 }

@@ -62,7 +62,7 @@ pub const TestFailure = struct {
 
     pub fn deinit(self: *TestFailure) void {
         self.alloc.free(self.testName);
-        self.alloc.free(self.errorMessage);
-        self.alloc.free(self.stackTrace);
+        if (self.errorMessage != null) self.alloc.free(self.errorMessage.?);
+        if (self.stackTrace != null) self.alloc.free(self.stackTrace.?);
     }
 };

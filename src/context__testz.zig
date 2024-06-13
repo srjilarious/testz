@@ -42,7 +42,7 @@ pub const TestContext = struct {
             fv.deinit();
         }
 
-        self.alloc.free(self.failures);
+        self.failures.deinit();
     }
 
     pub fn setCurrentTest(self: *TestContext, name: []const u8) void {

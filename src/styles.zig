@@ -7,6 +7,7 @@ const Style = printer.Color;
 
 pub const Styles = struct {
     value: Style,
+
     passTest: Style,
     skipTest: Style,
     errorTest: Style,
