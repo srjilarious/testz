@@ -25,13 +25,13 @@ pub const TestContext = struct {
     printColor: bool,
     currTestName: ?[]const u8,
 
-    pub fn init(alloc: std.mem.Allocator, verbose: bool, printStackTraceOnFail: bool, printColor: bool) TestContext {
+    pub fn init(alloc: std.mem.Allocator, opts: struct { verbose: bool = false, printStackTraceOnFail: bool = true, printColor: bool = true }) TestContext {
         return .{
             .failures = std.ArrayList(TestFailure).init(alloc),
             .alloc = alloc,
-            .verbose = verbose,
-            .printStackTraceOnFail = printStackTraceOnFail,
-            .printColor = printColor,
+            .verbose = opts.verbose,
+            .printStackTraceOnFail = opts.printStackTraceOnFail,
+            .printColor = opts.printColor,
             .currTestName = null,
         };
     }

@@ -2,7 +2,7 @@
 const std = @import("std");
 
 
-const Printer = @import("./printer.zig").Printer;
+pub const Printer = @import("./printer.zig").Printer;
 
 const core = @import("./core.zig");
 pub const TestFunc = core.TestFunc;
@@ -12,7 +12,7 @@ pub const Group = core.Group;
 const TestFuncGroup = core.TestFuncGroup;
 const TestFuncMap = core.TestFuncMap;
 
-const TestContext = @import("./context__testz.zig").TestContext;
+pub const TestContext = @import("./context__testz.zig").TestContext;
 
 const discovery = @import("./discovery.zig");
 pub const discoverTests = discovery.discoverTests;
@@ -219,7 +219,11 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             // Create a global context by pushing one, we'll clean this up at
             // the end of runTests.
             const newContext = try alloc.create(TestContext);
-            newContext.* = TestContext.init(alloc, opts.verbose, opts.printStackTraceOnFail, opts.printColor);
+            newContext.* = TestContext.init(alloc, .{ 
+                .verbose = opts.verbose, 
+                .printStackTraceOnFail = opts.printStackTraceOnFail, 
+                .printColor = opts.printColor,
+            });
             try pushTestContext(newContext, .{ .alloc = alloc });
             createdOwnContext = true;
         }
