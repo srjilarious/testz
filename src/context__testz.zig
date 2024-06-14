@@ -105,11 +105,12 @@ pub const TestContext = struct {
     }
 
     pub fn expectEqualStr(self: *TestContext, expected: []const u8, actual: []const u8) !void {
-        if (std.mem.eql(u8, expected, actual) == false) {
+        const idx = std.mem.indexOfDiff(u8, expected, actual);
+        if (idx != null) {
             if (self.printColor) {
-                try self.handleTestError("Expected " ++ White ++ "{s}" ++ Reset ++ " to be {s} " ++ Reset, .{ actual, expected });
+                try self.handleTestError("Expected " ++ White ++ "\"{s}\"" ++ Reset ++ " to be \"{s}\". Differs at index {}, expected=\"{c}\", actual=\"{c}\"" ++ Reset, .{ actual, expected, idx.?, expected[idx.?], actual[idx.?] });
             } else {
-                try self.handleTestError("Expected {s} to be {s} ", .{ actual, expected });
+                try self.handleTestError("Expected \"{s}\" to be \"{s}\". Differs at index {}, expected=\"{c}\", actual=\"{c}\"", .{ actual, expected, idx.?, expected[idx.?], actual[idx.?] });
             }
             return error.TestExpectedEqual;
         }

@@ -34,6 +34,8 @@ pub const RunTestOpts = struct {
     verbose: bool = false,
     printStackTraceOnFail: bool = true,
     printColor: bool = true,
+    // Used for internal testing putting XX.X ms as the time for each test.
+    dummyTiming: bool = false,
     writer: ?Printer = null,
     testContext: ?*TestContext = null,
 };
@@ -122,14 +124,25 @@ fn printChars(writer: *Printer, ch: []const u8, num: usize) !void {
     }
 }
 
-fn printTestTime(writer: *Printer, timeNs: u64, printColor: bool) !void {
+fn printTestTime(
+        writer: *Printer, 
+        timeNs: u64, 
+        opts: struct { 
+            printColor: bool,
+            dummyTiming: bool = false,
+        },
+    ) !void {
     try writer.print(" (", .{});
-    if(printColor) try writer.print(White, .{});
+    if(opts.printColor) try writer.print(White, .{});
 
     const timeNsFloat: f64 = @floatFromInt(timeNs);
 
+    // Used for internal testing.
+    if(opts.dummyTiming) {
+        try writer.print(" XX.XX ms", .{});
+    }
     // Seconds
-    if(timeNs > 1000_000_000) {
+    else if(timeNs > 1000_000_000) {
         try writer.print("{d: >6.2} secs", .{timeNsFloat / 1000_000_000.0}); 
     }
     // milliseconds
@@ -145,7 +158,7 @@ fn printTestTime(writer: *Printer, timeNs: u64, printColor: bool) !void {
         try writer.print("{d: >6} ns", .{timeNs});
     }
 
-    if(printColor) try writer.print(Reset, .{});
+    if(opts.printColor) try writer.print(Reset, .{});
     try writer.print(")", .{});
 }
 
@@ -193,7 +206,7 @@ fn pushGivenContext(givenContext: *TestContext, alloc: std.mem.Allocator, opts: 
 {
     givenContext.verbose = opts.verbose;
     givenContext.printStackTraceOnFail = opts.printStackTraceOnFail;
-    givenContext.printColor = !opts.printColor;
+    givenContext.printColor = opts.printColor;
     try pushTestContext(givenContext, .{ .alloc = alloc });
 }
 
@@ -401,7 +414,10 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             const testAmountNs = testEndTime.since(testStartTime);
 
             if(opts.verbose) {
-                try printTestTime(&writer, testAmountNs, opts.printColor);
+                try printTestTime(&writer, testAmountNs, .{ 
+                    .printColor=opts.printColor, 
+                    .dummyTiming=opts.dummyTiming,
+                });
             }
 
             totalTestTimeNs += testAmountNs;
@@ -448,7 +464,10 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         });
     }
 
-    try printTestTime(&writer, totalTestTimeNs, opts.printColor);
+    try printTestTime(&writer, totalTestTimeNs, .{ 
+        .printColor = opts.printColor, 
+        .dummyTiming = opts.dummyTiming,
+    });
     try writer.print("\n", .{});
     try writer.flush();
 
@@ -465,6 +484,10 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         const gtcAlloc = GlobalTestContext.?.alloc;
         GlobalTestContext.?.deinit();
         gtcAlloc.destroy(GlobalTestContext.?);
+        popTestContext();
+    }
+
+    if(opts.testContext != null) {
         popTestContext();
     }
 
