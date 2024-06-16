@@ -7,24 +7,24 @@
 Testz is a testing library for zig that provides some extra features compared to the built in unit testing.
 
 - Color output with both a verbose mode and non-verbose mode
-  - In verbose mode, you can see the name of each test run
-  - In both cases a test run summary lets you know how many tests ran.
+  - In verbose mode, you can see the name of each test run and how long it took to run.
+  - In both cases a test run summary lets you know how many tests ran and the overall time.
 - Easy filtering by group tag or test name itself
   - Making it easier to set a breakpoint and debug a single test.
 - Stack traces of relevant code only
-  - Skips stack frames from `testz` itself as well as `main` where the test runner itself is called.
-- Provides a test runner with argument parsing for a default use case.
-- Has a test discovery helper that searches for tests by finding functions ending in `Test`, allowing tests to be skipped by prepending `skip_` to the start of the function name.
+  - Skips stack frames from `testz` itself as well as `main` where the test runner is called.
+- Provides a test runner utility function with argument parsing for a default use case.
+- Has a test discovery helper that searches for tests by finding public functions in a passed in module, allowing tests to be skipped by prepending `skip_` to the start of the function name.
 
-Testz runners are just another executable you setup in your `build.zig`, which provides a number of helpers to make it as easy as possible to create tests.  This makes debugging really easy since you can attach gdb, etc and use the built in filtering to narrow down what test or set of tests gets run.
+Testz runners are just another executable you setup in your `build.zig`, with the library providing a number of helpers to make it as easy as possible to create tests.  Debugging is simple since you can run your debugger just like with any normal flat executable and use the built in filtering to narrow down what test or set of tests gets run.
 
 # Example
 
-Here's what a project running a couple of tests without errors in non-verbose mode looks like:
+Here's what the example project running a couple of tests in non-verbose mode looks like:
 
-![All tests passing, non-verbose](images/passing_non-verbose.png)
+![non-verbose output](images/non_verbose_output.png)
 
-Here's an example from `testz` itself showing verbose output with a number of tests failing (on purpose in this case):
+Here's the verbose mode of output from the example project:
 
 ![Failing test example, verbose output](images/verbose_output.png)
 
@@ -62,11 +62,11 @@ pub fn skip_Test() !void {
 }
 ```
 
-The test functions all end in `Test` and are public.  The `testz` library has a number of `expectXYZ` functions you can use to make assertions in your code.  If one fails, `testz` will capture the name of the failed test, error message, and stack trace (with contextual lines).
+The test functions are simply any public function in a module you pass into `discoverTests`.  The `testz` library has a number of `expectXYZ` functions you can use to make assertions in your code.  If one fails, `testz` will capture the name of the failed test, error message, and stack trace (with contextual lines).
 
 ### Test Runner 
 
-Here is an example test runner program, showing test discovery and using the built in test runner with standard argument parsing.
+Here is an example test runner program that you would create in your project.  It shows test discovery and using the built in test runner with standard argument parsing.
 
 ```tests/main.zig
 const std = @import("std");
@@ -86,63 +86,21 @@ The function `testsz.discoverTests`, takes a tuple of either direct module `@imp
 
 ### A `build.zig` Setup
 
-In your `build.zig`, you would have something like (assuming the library is pulled in from your `build.zig.zon`):
+Run `zig fetch --save https://github.com/srjilarious/testz` to add `testz` as a dependency in your `build.zig.zon` file.
+
+Next, in your `build.zig`, you would create a new exe for your tests and add:
 
 ```zig
     const testzMod = b.dependency("testz", .{});
     [...]
-    exe.root_module.addImport("testz", testzMod.module("testz"));
+    testsExe.root_module.addImport("testz", testzMod.module("testz"));
 ```
-
-Where the middle portion is the standard exe setup, so the full thing would look like:
-
-```zig
-  const testzMod = b.dependency("testz", .{});
-  const exe = b.addExecutable(.{
-        .name = "unit_tests",
-        // In this case the main source file is merely a path, however, in more
-        // complicated build scripts, this could be a generated file.
-        .root_source_file = b.path("tests/main.zig") },
-        .target = target,
-        .optimize = optimize,
-    });
-    exe.root_module.addImport("testz", testzMod.module("testz"));
-
-    // This declares intent for the executable to be installed into the
-    // standard location when the user invokes the "install" step (the default
-    // step when running `zig build`).
-    b.installArtifact(exe);
-
-    // This *creates* a Run step in the build graph, to be executed when another
-    // step is evaluated that depends on it. The next line below will establish
-    // such a dependency.
-    const run_cmd = b.addRunArtifact(exe);
-
-    // By making the run step depend on the install step, it will be run from the
-    // installation directory rather than directly from within the cache directory.
-    // This is not necessary, however, if the application depends on other installed
-    // files, this ensures they will be present and in the expected location.
-    run_cmd.step.dependOn(b.getInstallStep());
-
-    // This allows the user to pass arguments to the application in the build
-    // command itself, like this: `zig build run -- arg1 arg2 etc`
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
-
-    // This creates a build step. It will be visible in the `zig build --help` menu,
-    // and can be selected like this: `zig build run`
-    // This will evaluate the `run` step rather than the default, which is "install".
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
-```
+See the project under `example/` for how this looks in a simple dummy project.
 
 # Planned Features
 
-The library is already usable, but does have some features that are not yet implemented.  As it develops I make well change the formatting output as well, although a goal is to make writing your own test runner with custom formatting a mostly trivial exercise.
+The library has all of the initial features I set out to implement.  Feel free to open an issue or open a PR if there is a feature you'd like to see!
 
 ### Roadmap / Ideas
-- [ ] Add no-color option, check for tty before outputting colors.
-- [ ] Debugging flag to print out each function evaluated for to handle it as a test or not.
 - [ ] Capture number of assertions in each test
 
