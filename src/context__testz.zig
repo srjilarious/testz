@@ -96,9 +96,9 @@ pub const TestContext = struct {
     pub fn expectFalse(self: *TestContext, actual: bool) !void {
         if (actual == true) {
             if (self.printColor) {
-                try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to be false " ++ Reset, .{actual});
+                try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to be false" ++ Reset, .{actual});
             } else {
-                try self.handleTestError("Expected {} to be false ", .{actual});
+                try self.handleTestError("Expected {} to be false", .{actual});
             }
             return error.TestExpectedFalse;
         }
@@ -119,9 +119,9 @@ pub const TestContext = struct {
     pub fn expectEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
         if (expected != actual) {
             if (self.printColor) {
-                try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to be {} " ++ Reset, .{ actual, expected });
+                try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to be {}" ++ Reset, .{ actual, expected });
             } else {
-                try self.handleTestError("Expected {} to be {} ", .{ actual, expected });
+                try self.handleTestError("Expected {} to be {}", .{ actual, expected });
             }
             return error.TestExpectedEqual;
         }
@@ -130,9 +130,9 @@ pub const TestContext = struct {
     pub fn expectNotEqualStr(self: *TestContext, expected: []const u8, actual: []const u8) !void {
         if (std.mem.eql(u8, expected, actual) == true) {
             if (self.printColor) {
-                try self.handleTestError("Expected " ++ White ++ "{s}" ++ Reset ++ " to NOT be {s} " ++ Reset, .{ actual, expected });
+                try self.handleTestError("Expected " ++ White ++ "{s}" ++ Reset ++ " to NOT be {s}" ++ Reset, .{ actual, expected });
             } else {
-                try self.handleTestError("Expected {s} to NOT be {s} ", .{ actual, expected });
+                try self.handleTestError("Expected {s} to NOT be {s}", .{ actual, expected });
             }
             return error.TestExpectedNotEqual;
         }
@@ -141,7 +141,7 @@ pub const TestContext = struct {
     pub fn expectNotEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
         if (expected == actual) {
             if (self.printColor) {
-                try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to NOT be {} " ++ Reset, .{ actual, expected });
+                try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to NOT be {}" ++ Reset, .{ actual, expected });
             } else {
                 try self.handleTestError("Expected {} to NOT be {}", .{ actual, expected });
             }
