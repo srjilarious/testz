@@ -100,19 +100,19 @@ pub fn expectFalse(actual: anytype) !void {
     try GlobalTestContext.?.expectFalse(actual);
 }
 
-pub fn expectEqualStr(expected: []const u8, actual: []const u8) !void {
+pub fn expectEqualStr(actual: []const u8, expected: []const u8) !void {
     try GlobalTestContext.?.expectEqualStr(expected, actual);
 }
 
-pub fn expectEqual(expected: anytype, actual: anytype) !void {
+pub fn expectEqual(actual: anytype, expected: anytype) !void {
     try GlobalTestContext.?.expectEqual(expected, actual);
 }
 
-pub fn expectNotEqualStr(expected: []const u8, actual: []const u8) !void {
+pub fn expectNotEqualStr(actual: []const u8, expected: []const u8) !void {
     try GlobalTestContext.?.expectNotEqualStr(expected, actual);
 }
 
-pub fn expectNotEqual(expected: anytype, actual: anytype) !void {
+pub fn expectNotEqual(actual: anytype, expected: anytype) !void {
     try GlobalTestContext.?.expectNotEqual(expected, actual);
 }
 
@@ -438,9 +438,14 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         }
         try writer.print(": {?s}", .{failure.errorMessage});
         if(opts.printStackTraceOnFail) {
-            try writer.print("{?s}\n", .{failure.stackTrace});
-        }
+            if(failure.stackTrace != null) {
+                try writer.print("{?s}\n", .{failure.stackTrace});
             }
+            else {
+                try writer.print("\nNo stack trace available.\n", .{});
+            }
+        }
+    }
 
     if(opts.printColor) {
         try writer.print("\n\n" ++ White ++ "{} " ++ Green ++ "Passed" ++ Reset ++ ", " ++

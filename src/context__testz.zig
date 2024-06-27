@@ -104,46 +104,46 @@ pub const TestContext = struct {
         }
     }
 
-    pub fn expectEqualStr(self: *TestContext, expected: []const u8, actual: []const u8) !void {
+    pub fn expectEqualStr(self: *TestContext, actual: []const u8, expected: []const u8) !void {
         const idx = std.mem.indexOfDiff(u8, expected, actual);
         if (idx != null) {
             if (self.printColor) {
-                try self.handleTestError("Expected " ++ White ++ "\"{s}\"" ++ Reset ++ " to be \"{s}\". Differs at index {}, expected=\"{c}\", actual=\"{c}\"" ++ Reset, .{ actual, expected, idx.?, expected[idx.?], actual[idx.?] });
+                try self.handleTestError("Expected " ++ White ++ "\"{s}\"" ++ Reset ++ " to be \"{s}\". Differs at index {}, expected=\"{c}\", actual=\"{c}\"" ++ Reset, .{ expected, actual, idx.?, expected[idx.?], actual[idx.?] });
             } else {
-                try self.handleTestError("Expected \"{s}\" to be \"{s}\". Differs at index {}, expected=\"{c}\", actual=\"{c}\"", .{ actual, expected, idx.?, expected[idx.?], actual[idx.?] });
+                try self.handleTestError("Expected \"{s}\" to be \"{s}\". Differs at index {}, expected=\"{c}\", actual=\"{c}\"", .{ expected, actual, idx.?, expected[idx.?], actual[idx.?] });
             }
             return error.TestExpectedEqual;
         }
     }
 
-    pub fn expectEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
+    pub fn expectEqual(self: *TestContext, actual: anytype, expected: anytype) !void {
         if (expected != actual) {
             if (self.printColor) {
-                try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to be {}" ++ Reset, .{ actual, expected });
+                try self.handleTestError("Expected " ++ White ++ "{any}" ++ Reset ++ " to be {any}" ++ Reset, .{ expected, actual });
             } else {
-                try self.handleTestError("Expected {} to be {}", .{ actual, expected });
+                try self.handleTestError("Expected {any} to be {any}", .{ expected, actual });
             }
             return error.TestExpectedEqual;
         }
     }
 
-    pub fn expectNotEqualStr(self: *TestContext, expected: []const u8, actual: []const u8) !void {
+    pub fn expectNotEqualStr(self: *TestContext, actual: []const u8, expected: []const u8) !void {
         if (std.mem.eql(u8, expected, actual) == true) {
             if (self.printColor) {
-                try self.handleTestError("Expected " ++ White ++ "{s}" ++ Reset ++ " to NOT be {s}" ++ Reset, .{ actual, expected });
+                try self.handleTestError("Expected " ++ White ++ "\"{s}\"" ++ Reset ++ " to NOT be \"{s}\"" ++ Reset, .{ expected, actual });
             } else {
-                try self.handleTestError("Expected {s} to NOT be {s}", .{ actual, expected });
+                try self.handleTestError("Expected \"{s}\" to NOT be \"{s}\"", .{ expected, actual });
             }
             return error.TestExpectedNotEqual;
         }
     }
 
-    pub fn expectNotEqual(self: *TestContext, expected: anytype, actual: anytype) !void {
+    pub fn expectNotEqual(self: *TestContext, actual: anytype, expected: anytype) !void {
         if (expected == actual) {
             if (self.printColor) {
-                try self.handleTestError("Expected " ++ White ++ "{}" ++ Reset ++ " to NOT be {}" ++ Reset, .{ actual, expected });
+                try self.handleTestError("Expected " ++ White ++ "{any}" ++ Reset ++ " to NOT be {any}" ++ Reset, .{ expected, actual });
             } else {
-                try self.handleTestError("Expected {} to NOT be {}", .{ actual, expected });
+                try self.handleTestError("Expected {any} to NOT be {any}", .{ expected, actual });
             }
             return error.TestExpectedNotEqual;
         }
@@ -247,14 +247,20 @@ fn printStackTrace(failure: *TestFailure, printColor: bool) !void {
     defer trace.deinit();
     var first = true;
     while (it.next()) |return_address| {
-        const module = debug_info.getModuleForAddress(return_address) catch |err| switch (err) {
-            error.MissingDebugInfo, error.InvalidDebugInfo => return, //printUnknownSource(debug_info, out_stream, address, tty_config),
-            else => return err,
+        const module = debug_info.getModuleForAddress(return_address) catch {
+            break;
+            // switch (err) {
+            //     error.MissingDebugInfo, error.InvalidDebugInfo => return err, //printUnknownSource(debug_info, out_stream, address, tty_config),
+            //     else => return err,
+            // }
         };
 
-        const symbol_info = module.getSymbolAtAddress(debug_info.allocator, return_address) catch |err| switch (err) {
-            error.MissingDebugInfo, error.InvalidDebugInfo => return, // printUnknownSource(debug_info, out_stream, address, tty_config),
-            else => return err,
+        const symbol_info = module.getSymbolAtAddress(debug_info.allocator, return_address) catch {
+            break;
+            // switch (err) {
+            //     error.MissingDebugInfo, error.InvalidDebugInfo => , // printUnknownSource(debug_info, out_stream, address, tty_config),
+            //     else => return err,
+            // }
         };
         defer symbol_info.deinit(debug_info.allocator);
 
@@ -272,9 +278,9 @@ fn printStackTrace(failure: *TestFailure, printColor: bool) !void {
 
             // std.debug.print("*** Symbol: {s}, {s}\n", .{symbol_info.symbol_name, symbol_info.compile_unit_name});
             if (printColor) {
-                try std.fmt.format(out_stream, "\n{s}:" ++ White ++ "{d}" ++ Reset ++ ":{d}:\n", .{ li.file_name, li.line, li.column });
+                std.fmt.format(out_stream, "\n{s}:" ++ White ++ "{d}" ++ Reset ++ ":{d}:\n", .{ li.file_name, li.line, li.column }) catch break;
             } else {
-                try std.fmt.format(out_stream, "\n{s}:{d}:{d}:\n", .{ li.file_name, li.line, li.column });
+                std.fmt.format(out_stream, "\n{s}:{d}:{d}:\n", .{ li.file_name, li.line, li.column }) catch break;
             }
 
             if (first) {
@@ -282,14 +288,18 @@ fn printStackTrace(failure: *TestFailure, printColor: bool) !void {
                 first = false;
             }
         } else {
-            _ = try out_stream.write("???:?:?\n");
+            _ = out_stream.write("???:?:?\n") catch break;
         }
 
         // try stderr.print(" 0x{x} in {s} ({s})\n\n", .{ return_address, symbol_info.symbol_name, symbol_info.compile_unit_name });
 
         if (line_info) |li| {
-            try printLinesFromFileAnyOs(out_stream, li, 3, printColor);
+            printLinesFromFileAnyOs(out_stream, li, 3, printColor) catch {};
         }
+    }
+
+    if (first) {
+        std.fmt.format(out_stream, "No printable stack frames.", .{}) catch {};
     }
 
     failure.stackTrace = try trace.toOwnedSlice();
