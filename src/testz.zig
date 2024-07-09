@@ -516,9 +516,10 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
             .description = "Unit tests....", 
             .opts = &[_]Option{
                 Option{ .longName = "verbose", .shortName = "v", .description = "Verbose output", .maxNumParams = 0 },
-                Option{ .longName = "stack_trace", .shortName = "s", .description = "Print stack traces on errors", .maxNumParams = 0 },
+                Option{ .longName = "stack_trace", .shortName = "s", .description = "Print stack traces on errors", .maxNumParams = 0, .default = zargs.DefaultValue.set() },
                 Option{ .longName = "groups", .shortName = "g", .description = "Lists the groups of tests", .maxNumParams = 0 },
                 Option{ .longName = "no-color", .description = "Disables color output", .maxNumParams = 0 },
+                Option{ .longName = "help", .shortName = "h", .description = "Prints out the help text." },
             } 
         });
     defer parser.deinit();
@@ -529,8 +530,20 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
     };
     defer args.deinit();
 
+    // Prints out the help text and exits
+    if(args.hasOption("help")) {
+        // using duped Printer struct comes from using vendored zargunaught lib
+        var printer = try zargs.print.Printer.stdout(std.heap.page_allocator);
+        defer printer.deinit();
+
+        var help = zargs.help.HelpFormatter.init(&parser, printer, zargs.help.DefaultTheme);
+        help.printHelpText() catch |err| {
+            std.debug.print("Err: {any}\n", .{err});
+        }; 
+        try printer.flush();
+    }
     // List out the available group tags and names.
-    if(args.hasOption("groups")) {
+    else if(args.hasOption("groups")) {
         var printer = try Printer.stdout(std.heap.page_allocator);
         defer printer.deinit();
 

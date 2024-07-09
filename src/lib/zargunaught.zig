@@ -3,6 +3,8 @@ const std = @import("std");
 const ArgQueue = std.TailQueue([]const u8);
 
 pub const utils = @import("./utils.zig");
+pub const help = @import("./helptext.zig");
+pub const print = @import("./printer.zig");
 
 pub const ParserConfigError = error{ 
     LongOptionNameMissing,
@@ -13,13 +15,39 @@ pub const ParserConfigError = error{
     CommandGroupNameMissing,
 };
 
-pub const ParseError = error{UnknownOption};
+pub const ParseError = error{UnknownOption, TooFewOptionParams};
+
+// Used to provide a list of parameters to an option when it takes
+// parameters.
+const DefaultParameters = struct {
+    value: []const u8
+};
+
+// Used to set an option to default on when it has no parameters.
+const DefaultOption = struct {
+    on: bool = true
+};
+
+pub const DefaultValue = union(enum) {
+    params: DefaultParameters,
+    set: DefaultOption,
+
+    pub fn params(val: []const u8) DefaultValue {
+        return DefaultValue{ .params = .{ .value = val }};
+    }
+
+    pub fn set() DefaultValue {
+        return DefaultValue{ .set = .{ .on = true }};
+    }
+};
 
 pub const Option = struct {
     longName: []const u8,
     shortName: []const u8 = "",
     description: []const u8 = "",
-    maxNumParams: i8 = 0,
+    minNumParams: ?u8 = null,
+    maxNumParams: ?u8 = null,
+    default: ?DefaultValue = null,
 };
 
 
@@ -104,7 +132,8 @@ pub const OptionList = struct {
 
 pub const Command = struct { 
     name: []const u8, 
-    description: ?[]const u8,
+    description: ?[]const u8 = null,
+    group: ?[]const u8 = null,
     options: OptionList 
 };
 
@@ -155,13 +184,24 @@ pub const CommandList = struct {
     }
 };
 
+/// The configuration options for a command used when setting
+/// up the ArgParser.
 pub const CommandOpt = struct {
     name: []const u8,
     description: ?[]const u8 = null,
-    // group: ?[]const u8,
+    group: ?[]const u8 = null,
     opts: ?[]const Option = null,
 };
 
+/// The parameters for a named group of commands.  This is just
+/// a convenience wrapper for specifying the same group name on
+/// each command diretly.
+pub const GroupOpt = struct {
+    name: []const u8,
+    commands: [] const CommandOpt,
+};
+
+/// The top level configuration parameters for an ArgParser.
 pub const ArgParserOpts = struct {
     name: ?[]const u8 = null,
     banner: ?[]const u8 = null,
@@ -169,14 +209,18 @@ pub const ArgParserOpts = struct {
     usage: ?[]const u8 = null,
     opts: ?[]const Option = null,
     commands: ?[] const CommandOpt = null,
+    groups: ?[]const GroupOpt = null,
 };
 
+/// A zargunaught argument parser, with global options and commands.
 pub const ArgParser = struct {
     name: []const u8,
     banner: ?[]const u8,
     description: ?[]const u8,
     usage: ?[]const u8,
     options: OptionList,
+
+    // Contains all commands, even grouped ones.
     commands: CommandList,
     alloc: std.mem.Allocator,
 
@@ -204,6 +248,7 @@ pub const ArgParser = struct {
                 var cmdItem: Command = .{
                     .name=cmd.name,
                     .description=cmd.description,
+                    .group=cmd.group,
                     .options=OptionList.init(allocator)
                 };
 
@@ -214,6 +259,27 @@ pub const ArgParser = struct {
                 try argsParser.commands.data.append(cmdItem);
             }
         }
+
+        if(opts.groups != null) {
+            const groups = opts.groups.?;
+            for(groups) |group| {
+                for(group.commands) |cmd| {
+                    var cmdItem: Command = .{
+                        .name=cmd.name,
+                        .description=cmd.description,
+                        .group=group.name,
+                        .options=OptionList.init(allocator)
+                    };
+
+                    if(cmd.opts != null) {
+                        try cmdItem.options.addOptions(cmd.opts.?);
+                    }
+
+                    try argsParser.commands.data.append(cmdItem);
+                }
+            }
+        }
+
         return argsParser;
     }
 
@@ -222,20 +288,20 @@ pub const ArgParser = struct {
         self.commands.deinit();
     }
 
-    pub fn description(self: *ArgParser, desc: []const u8) *ArgParser {
-        self.description = desc;
-        return self;
-    }
-
-    pub fn usage(self: *ArgParser, use: []const u8) *ArgParser {
-        self.usage = use;
-        return self;
-    }
-
-    pub fn withOptions(self: *ArgParser, opts: []const Option) ParserConfigError!*ArgParser {
-        try self.options.addOptions(opts);
-        return self;
-    }
+    // pub fn description(self: *ArgParser, desc: []const u8) *ArgParser {
+    //     self.description = desc;
+    //     return self;
+    // }
+    //
+    // pub fn usage(self: *ArgParser, use: []const u8) *ArgParser {
+    //     self.usage = use;
+    //     return self;
+    // }
+    //
+    // pub fn withOptions(self: *ArgParser, opts: []const Option) ParserConfigError!*ArgParser {
+    //     try self.options.addOptions(opts);
+    //     return self;
+    // }
 
     fn parseOption(parseText: *ArgQueue, parseResult: *ArgParserResult, availableOpts: *const OptionList) ParseError!?OptionResult {
         if (parseText.len == 0) return null;
@@ -270,8 +336,9 @@ pub const ArgParser = struct {
 
             var paramCounter: usize = 0;
             while (parseText.len > 0 and
-                (opt.?.maxNumParams == -1 or
-                paramCounter < opt.?.maxNumParams)) : (paramCounter += 1)
+                (opt.?.maxNumParams == null or
+                // TODO: Fix maxNumParams == 0 case for min params.
+                paramCounter < opt.?.maxNumParams.?)) : (paramCounter += 1)
             {
                 const currVal = parseText.first.?.data;
                 if (currVal[0] == '-' and currVal.len > 1) {
@@ -285,6 +352,10 @@ pub const ArgParser = struct {
                 paramCounter += 1;
 
                 // std.debug.print("    Option param: {s}\n", .{currVal});
+            }
+
+            if(opt.?.minNumParams != null and optResult.values.items.len < opt.?.minNumParams.?) {
+                return ParseError.TooFewOptionParams;
             }
 
             return optResult;
@@ -353,31 +424,60 @@ pub const ArgParser = struct {
 
         var parseResult = ArgParserResult.init(self.alloc);
         // var lastOpt: ?OptionResult = null;
-        if(parseText.len == 0) return parseResult;
 
-        try parseArgsForOptions(&parseResult, &self.options, &parseText);
+        // Create a temporary option list to use to find combined global and command level options.
+        // Allso used for handling checking for adding in default values at the end.
+        var availableOpts = OptionList.init(self.alloc);
+        defer availableOpts.deinit();
 
-        if(parseText.len == 0) return parseResult;
+        try availableOpts.addOptions(self.options.data.items);
 
-        // Setup command list.
-        const frontData = parseText.first.?.data;
+        // if(parseText.len == 0) return parseResult;
 
-        // Handle looking for commands after any initial global options.
-        for(0..self.commands.data.items.len) |cmdIdx| {
-            const cmd: *Command = &self.commands.data.items[cmdIdx];
-            if(std.mem.eql(u8, cmd.name, frontData)) {
-                parseResult.command = cmd;
+        if(parseText.len > 0) {
+            try parseArgsForOptions(&parseResult, &self.options, &parseText);
+        }
 
-                _ = parseText.popFirst();
+        if(parseText.len > 0) {
+            // Setup command list.
+            const frontData = parseText.first.?.data;
 
-                // Create a temporary option list to use to find combined global and command level options.
-                var availableOpts = OptionList.init(self.alloc);
-                defer availableOpts.deinit();
+            // Handle looking for commands after any initial global options.
+            for(0..self.commands.data.items.len) |cmdIdx| {
+                const cmd: *Command = &self.commands.data.items[cmdIdx];
+                if(std.mem.eql(u8, cmd.name, frontData)) {
+                    parseResult.command = cmd;
 
-                try availableOpts.addOptions(self.options.data.items);
-                try availableOpts.addOptions(cmd.options.data.items);
+                    _ = parseText.popFirst();
 
-                try parseArgsForOptions(&parseResult, &availableOpts, &parseText);
+                    // Add the command level options to our temp opts list.
+                    try availableOpts.addOptions(cmd.options.data.items);
+
+                    try parseArgsForOptions(&parseResult, &availableOpts, &parseText);
+                }
+            }
+        }
+
+        // Handle filling in any options with defaults that weren't specified but have defaults configured.
+        for(availableOpts.data.items) |opt| {
+            if(opt.default == null) continue;
+    
+            if(!parseResult.hasOption(opt.longName)) {
+                const defaultVal = opt.default.?;
+                var optResult = OptionResult.init(opt.longName);
+                switch(defaultVal) {
+                    .params => |p| {
+                        try optResult.values.append(p.value);
+                        try parseResult.options.append(optResult);
+                    },
+                    .set => |s| {
+                        // You could specify a default of not set, so handle
+                        // that case too.
+                        if(s.on) {
+                            try parseResult.options.append(optResult);
+                        }
+                    }
+                }
             }
         }
 
@@ -387,6 +487,7 @@ pub const ArgParser = struct {
             try parseResult.positional.append(posData);
             _ = parseText.popFirst();
         }
+
         return parseResult;
     }
 };
@@ -417,6 +518,28 @@ pub const ArgParserResult = struct {
         }
 
         return false;
+    }
+
+    pub fn option(self: *ArgParserResult, optName: []const u8) ?*OptionResult {
+        for(0..self.options.items.len) |idx| {
+            const o = &self.options.items[idx];
+            if(std.mem.eql(u8, o.name, optName)) {
+                return o;
+            }
+        }
+
+        return null;
+    }
+
+    // Get the first value if it exists.
+    pub fn optionVal(self: *ArgParserResult, optName: []const u8) ?[]const u8 {
+        if(self.option(optName)) |o| {
+            if(o.values.items.len > 0) {
+                return o.values.items[0];
+            }
+        }
+
+        return null;
     }
 };
 
