@@ -1,8 +1,7 @@
 // zig fmt: off
 const std = @import("std");
 
-
-pub const Printer = @import("./printer.zig").Printer;
+pub const Printer = @import("./lib/printer.zig").Printer;
 
 const core = @import("./core.zig");
 pub const TestFunc = core.TestFunc;
