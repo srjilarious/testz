@@ -1,7 +1,10 @@
 // zig fmt: off
 const std = @import("std");
 
-pub const Printer = @import("./lib/printer.zig").Printer;
+const print = @import("./lib/printer.zig");
+pub const Printer = print.Printer;
+const Style = print.Style;
+const Color = print.Color;
 
 const core = @import("./core.zig");
 pub const TestFunc = core.TestFunc;
@@ -505,6 +508,25 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
 const zargs = @import("lib/zargunaught.zig");
 const Option = zargs.Option;
 
+
+const GroupTitleStyle: Style = .{
+    .fg = Color.BrightGreen,
+    .bg = Color.Reset,
+    .mod = .{ .underline = true, .bold = true }
+};
+
+const GroupNameStyle: Style = .{
+    .fg = Color.BrightWhite,
+    .bg = Color.Reset,
+    .mod = .{ .bold = true }
+};
+
+const GroupTagStyle: Style = .{
+    .fg = Color.BrightYellow,
+    .bg = Color.Reset,
+    .mod = .{}
+};
+
 /// A default test runner implementation that parses the command line for options and runs the passed in tests.
 /// It allows for verbose/non-verbose output, disabling printing stack traces and providing a list of
 /// filter tags to only run some tests.
@@ -532,7 +554,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
     // Prints out the help text and exits
     if(args.hasOption("help")) {
         // using duped Printer struct comes from using vendored zargunaught lib
-        var printer = try zargs.print.Printer.stdout(std.heap.page_allocator);
+        var printer = try Printer.stdout(std.heap.page_allocator);
         defer printer.deinit();
 
         var help = zargs.help.HelpFormatter.init(&parser, printer, zargs.help.DefaultTheme);
@@ -547,10 +569,43 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
         defer printer.deinit();
 
         const groups = try getGroupList(testsToRun, .{});
-        try printer.print("# Test groups:\n", .{});
-        for(groups) |g| {
-            try printer.print("{s}: {?s}\n", .{g.tag, g.name});
+
+        if(groups.len > 0) {
+            if(args.hasOption("no-color")) {
+                try printer.print("Test groups:\n\n", .{});
+                for(groups) |g| {
+                    try printer.print("{?s}: tag='{s}'.\n", .{g.name, g.tag});
+                }
+
+                try printer.print("\n\nUse the tag names as arguments to the test program to run that group.  Multiple group tags can be included.\n", .{});
+            }
+            else {
+                try GroupTitleStyle.set(printer);
+                try printer.print("Test groups", .{});
+                try Style.reset(printer);
+                try printer.print(":\n\n", .{});
+
+                for(groups) |g| {
+                    try GroupNameStyle.set(printer);
+                    try printer.print("{?s}", .{g.name});
+                    try Style.reset(printer);
+                    
+                    try printer.print(": tag=", .{});
+                    
+                    try GroupTagStyle.set(printer);
+                    try printer.print("'{s}'", .{g.tag}); 
+                    try Style.reset(printer);
+
+                    try printer.print(".\n", .{});
+                }
+
+                try printer.print("\n\nUse the tag names as arguments to the test program to run that group.  Multiple group tags can be included.\n", .{});
+            }
         }
+        else {
+            try printer.print("No test groups found!\n", .{});
+        }
+
         try printer.flush();
 
         std.heap.page_allocator.free(groups);
