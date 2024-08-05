@@ -27,6 +27,14 @@ pub const Group = struct {
     mod: type,
 };
 
+// Struct for how a list of modules can be passed in and associated as a group.
+pub const GroupList = struct {
+    name: []const u8,
+    // The string for filtering on.
+    tag: []const u8,
+    mods: []const type,
+};
+
 // A group as used at runtime.
 pub const TestFuncGroup = struct {
     name: []const u8,

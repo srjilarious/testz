@@ -11,6 +11,7 @@ pub const TestFunc = core.TestFunc;
 pub const TestFuncInfo = core.TestFuncInfo;
 const TestGroup = core.TestGroup;
 pub const Group = core.Group;
+pub const GroupList = core.GroupList;
 const TestFuncGroup = core.TestFuncGroup;
 const TestFuncMap = core.TestFuncMap;
 

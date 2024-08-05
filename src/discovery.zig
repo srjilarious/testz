@@ -5,6 +5,7 @@ const TestFunc = core.TestFunc;
 const TestFuncInfo = core.TestFuncInfo;
 const TestGroup = core.TestGroup;
 const Group = core.Group;
+const GroupList = core.GroupList;
 const TestFuncGroup = core.TestFuncGroup;
 const TestFuncMap = core.TestFuncMap;
 
@@ -72,6 +73,18 @@ pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type, 
     return &final;
 }
 
+fn addModuleTests(comptime tests: []TestFuncInfo, comptime mod: type, currGroup: TestGroup, opts: DiscoverOpts, idx: usize) usize {
+    comptime var testIdx = idx;
+
+    const modTests = discoverTestsInModule(currGroup, mod, opts);
+    for (modTests) |t| {
+        tests[testIdx] = t;
+        testIdx += 1;
+    }
+
+    return testIdx;
+}
+
 pub fn discoverTests(comptime mods: anytype, opts: DiscoverOpts) []const TestFuncInfo {
     const MaxTests = 10000;
     comptime var tests: [MaxTests]TestFuncInfo = undefined;
@@ -89,28 +102,44 @@ pub fn discoverTests(comptime mods: anytype, opts: DiscoverOpts) []const TestFun
         const fieldName = std.fmt.comptimePrint("{}", .{fieldIdx});
         const currIndexItem = @field(mods, fieldName);
         fieldIdx += 1;
-        const currMod = blk: {
-            if (@TypeOf(currIndexItem) == Group) {
-                currGroup = .{
-                    .name = @field(currIndexItem, "name"),
-                    .tag = @field(currIndexItem, "tag"),
-                };
-                // Grab the mods field from the Group to extract actual tests from.
-                break :blk @field(currIndexItem, "mod");
+
+        if (@TypeOf(currIndexItem) == Group) {
+            currGroup = .{
+                .name = @field(currIndexItem, "name"),
+                .tag = @field(currIndexItem, "tag"),
+            };
+
+            // Grab the mods field from the Group to extract actual tests from.
+            const currMod = @field(currIndexItem, "mod");
+            totalTests = addModuleTests(&tests, currMod, currGroup, opts, totalTests);
+        } else if (@TypeOf(currIndexItem) == GroupList) {
+            currGroup = .{
+                .name = @field(currIndexItem, "name"),
+                .tag = @field(currIndexItem, "tag"),
+            };
+
+            // Grab the mods field from the Group to extract actual tests from.
+            const groupMods = @field(currIndexItem, "mods");
+            const groupModType = @TypeOf(groupMods);
+            const groupModTypeInfo = @typeInfo(groupModType);
+            if (groupModTypeInfo == .Pointer) {
+                for (groupMods) |currMod| {
+                    totalTests = addModuleTests(&tests, currMod, currGroup, opts, totalTests);
+                }
             } else {
-                currGroup = .{
-                    .name = "Default",
-                    .tag = "default",
-                };
-
-                break :blk @field(mods, fieldName);
+                @compileLog("Expected a slice of modules to discover tests from.  Instead got");
+                @compileError(groupMods);
             }
-        };
+            // else {
+            // }
+        } else {
+            currGroup = .{
+                .name = "Default",
+                .tag = "default",
+            };
 
-        const modTests = discoverTestsInModule(currGroup, currMod, opts);
-        for (modTests) |t| {
-            tests[totalTests] = t;
-            totalTests += 1;
+            // We expect a normal struct/module import result in this case.
+            totalTests = addModuleTests(&tests, @field(mods, fieldName), currGroup, opts, totalTests);
         }
     }
 
