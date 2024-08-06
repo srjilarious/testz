@@ -540,7 +540,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
                 Option{ .longName = "verbose", .shortName = "v", .description = "Verbose output", .maxNumParams = 0 },
                 Option{ .longName = "stack_trace", .shortName = "s", .description = "Print stack traces on errors", .maxNumParams = 0, .default = zargs.DefaultValue.set() },
                 Option{ .longName = "groups", .shortName = "g", .description = "Lists the groups of tests", .maxNumParams = 0 },
-                Option{ .longName = "no-color", .description = "Disables color output", .maxNumParams = 0 },
+                Option{ .longName = "color", .description = "Enables color output", .maxNumParams = 0, .default = zargs.DefaultValue.set() },
                 Option{ .longName = "help", .shortName = "h", .description = "Prints out the help text." },
             } 
         });
@@ -558,7 +558,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
         var printer = try Printer.stdout(std.heap.page_allocator);
         defer printer.deinit();
 
-        var help = zargs.help.HelpFormatter.init(&parser, printer, zargs.help.DefaultTheme);
+        var help = try zargs.help.HelpFormatter.init(&parser, printer, zargs.help.DefaultTheme, std.heap.page_allocator);
         help.printHelpText() catch |err| {
             std.debug.print("Err: {any}\n", .{err});
         }; 
@@ -572,7 +572,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
         const groups = try getGroupList(testsToRun, .{});
 
         if(groups.len > 0) {
-            if(args.hasOption("no-color")) {
+            if(!args.hasOption("color")) {
                 try printer.print("Test groups:\n\n", .{});
                 for(groups) |g| {
                     try printer.print("{?s}: tag='{s}'.\n", .{g.name, g.tag});
@@ -615,7 +615,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
     else {
         const verbose = args.hasOption("verbose");
         const optPrintStackTrace = args.hasOption("stack_trace");
-        const optPrintNoColor = args.hasOption("no-color");
+        const optPrintColor = args.hasOption("color");
 
         const filters = (if(args.positional.items.len > 0) blk: {
             break :blk args.positional.items;
@@ -630,7 +630,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
                 .verbose = verbose,
                 .allowFilters = filters,
                 .printStackTraceOnFail = optPrintStackTrace,
-                .printColor = !optPrintNoColor,
+                .printColor = optPrintColor,
                 // .writer = memBuff,
             }
         );
