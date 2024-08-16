@@ -6,6 +6,7 @@ const Printer = testz.Printer;
 
 const runInternal = @import("./utils.zig").runInternal;
 
+//-------------------------------------------------------------------------------------------------
 fn expectEqualFailTestInternal() !void {
     try testz.expectEqual(10, 20);
 }
@@ -27,6 +28,7 @@ pub fn expectEqualFailTest() !void {
     }, expected, .{});
 }
 
+//-------------------------------------------------------------------------------------------------
 fn expectNotEqualFailTestInternal() !void {
     try testz.expectNotEqual(10, 10);
 }
@@ -48,6 +50,7 @@ pub fn expectNotEqualFailTest() !void {
     }, expected, .{});
 }
 
+//-------------------------------------------------------------------------------------------------
 fn expectEqualStrFailTestInternal() !void {
     try testz.expectEqualStr("hello", "world");
 }
@@ -69,6 +72,7 @@ pub fn expectEqualStrFailTest() !void {
     }, expected, .{});
 }
 
+//-------------------------------------------------------------------------------------------------
 fn expectNotEqualStrFailTestInternal() !void {
     try testz.expectNotEqualStr("hello", "hello");
 }
@@ -90,6 +94,7 @@ pub fn expectNotEqualStrFailTest() !void {
     }, expected, .{});
 }
 
+//-------------------------------------------------------------------------------------------------
 fn expectTrueFailTestInternal() !void {
     try testz.expectTrue(false);
 }
@@ -111,6 +116,7 @@ pub fn expectTrueFailTest() !void {
     }, expected, .{});
 }
 
+//-------------------------------------------------------------------------------------------------
 fn expectFalseFailTestInternal() !void {
     try testz.expectFalse(true);
 }
@@ -129,5 +135,32 @@ pub fn expectFalseFailTest() !void {
         .func = expectFalseFailTestInternal,
         .name = "expectFalseFailTest",
         .group = .{ .name = "Default", .tag = "default" },
+    }, expected, .{});
+}
+
+//-------------------------------------------------------------------------------------------------
+fn expectEqualOptionalOkTestInternal() !void {
+    const num: ?i32 = 10;
+    try testz.expectEqual(num, 10);
+    try testz.expectEqual(num, num);
+
+    const val: ?f32 = null;
+    try testz.expectEqual(val, null);
+    try testz.expectEqual(val, val);
+}
+
+pub fn expectEqualOptionalOkTest() !void {
+    const expected: []const u8 =
+        \\
+        \\⋅
+        \\
+        \\1 Passed, 0 Failed, 0 Skipped, 1 Total Tests ( XX.XX ms)
+        \\
+    ;
+
+    try runInternal(.{
+        .func = expectEqualOptionalOkTestInternal,
+        .name = "expectEqualOptionalOkTestInternal",
+        .group = .{ .name = "Expect", .tag = "expect" },
     }, expected, .{});
 }
