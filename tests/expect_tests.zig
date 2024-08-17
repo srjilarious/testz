@@ -164,3 +164,32 @@ pub fn expectEqualOptionalOkTest() !void {
         .group = .{ .name = "Expect", .tag = "expect" },
     }, expected, .{});
 }
+
+//-------------------------------------------------------------------------------------------------
+fn expectNotEqualOptionalOkTestInternal() !void {
+    const num: ?i32 = 10;
+    try testz.expectNotEqual(num, 100);
+    try testz.expectNotEqual(num, null);
+
+    const val: ?f32 = null;
+    const val2: ?f16 = 1.2;
+    try testz.expectNotEqual(val, 1.32);
+    try testz.expectNotEqual(val, 10);
+    try testz.expectNotEqual(val, val2);
+}
+
+pub fn expectNotEqualOptionalOkTest() !void {
+    const expected: []const u8 =
+        \\
+        \\⋅
+        \\
+        \\1 Passed, 0 Failed, 0 Skipped, 1 Total Tests ( XX.XX ms)
+        \\
+    ;
+
+    try runInternal(.{
+        .func = expectNotEqualOptionalOkTestInternal,
+        .name = "expectEqualOptionalOkTestInternal",
+        .group = .{ .name = "Expect", .tag = "expect" },
+    }, expected, .{});
+}

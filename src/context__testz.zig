@@ -170,7 +170,38 @@ pub const TestContext = struct {
     }
 
     pub fn expectNotEqual(self: *TestContext, actual: anytype, expected: anytype) !void {
-        if (expected == actual) {
+        const T = @TypeOf(actual);
+        const ExT = @TypeOf(expected);
+        var testPassed = true;
+        switch (@typeInfo(T)) {
+            .Optional => {
+                if (actual) |payload| {
+                    switch (@typeInfo(ExT)) {
+                        .Optional => {
+                            testPassed = (expected == null) or (payload != expected.?);
+                        },
+                        else => {
+                            testPassed = (expected != payload);
+                        },
+                    }
+                } else {
+                    switch (@typeInfo(ExT)) {
+                        .Optional => {
+                            testPassed = (expected != null);
+                        },
+                        .Null => {},
+                        else => {
+                            testPassed = true;
+                        },
+                    }
+                }
+            },
+            else => {
+                testPassed = (expected != actual);
+            },
+        }
+
+        if (!testPassed) {
             if (self.printColor) {
                 try self.handleTestError("Expected " ++ White ++ "{any}" ++ Reset ++ " to NOT be {any}" ++ Reset, .{ expected, actual });
             } else {
