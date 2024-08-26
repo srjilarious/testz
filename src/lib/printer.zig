@@ -43,6 +43,8 @@ pub const Style = struct {
     }
 
     pub fn set(self: *const Style, printer: Printer) !void {
+        if(!printer.supportsColor()) return;
+
         if(self.fg == .Reset or self.bg == .Reset or self.mod.none()) {
             try reset(printer);
         }
@@ -108,6 +110,7 @@ pub const Style = struct {
 const FilePrinterData = struct {
     alloc: std.mem.Allocator,
     file: std.fs.File,
+    colorOutput: bool,
     bufferWriter: std.io.BufferedWriter(4096, std.fs.File.Writer),
 };
 
@@ -127,6 +130,7 @@ pub const Printer = union(enum) {
         var f = try alloc.create(FilePrinterData);
         f.alloc = alloc;
         f.file = std.io.getStdOut();
+        f.colorOutput = f.file.getOrEnableAnsiEscapeSupport() and f.file.isTty();
         f.bufferWriter = std.io.bufferedWriter(f.file.writer());
         return .{.file = f};
     }
@@ -182,6 +186,13 @@ pub const Printer = union(enum) {
         }
     }
 
+    pub fn supportsColor(self: *const Printer) bool {
+        switch(self.*) {
+            .file => |f| return f.colorOutput,
+            .debug => |_| return std.io.getStdErr().supportsAnsiEscapeCodes(),
+            else => { return false; },
+        }
+    }
     
     pub fn printWrapped(
             self: *Printer, 
