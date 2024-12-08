@@ -104,19 +104,19 @@ pub fn expectFalse(actual: anytype) !void {
 }
 
 pub fn expectEqualStr(actual: []const u8, expected: []const u8) !void {
-    try GlobalTestContext.?.expectEqualStr(expected, actual);
+    try GlobalTestContext.?.expectEqualStr(actual, expected);
 }
 
 pub fn expectEqual(actual: anytype, expected: anytype) !void {
-    try GlobalTestContext.?.expectEqual(expected, actual);
+    try GlobalTestContext.?.expectEqual(actual, expected);
 }
 
 pub fn expectNotEqualStr(actual: []const u8, expected: []const u8) !void {
-    try GlobalTestContext.?.expectNotEqualStr(expected, actual);
+    try GlobalTestContext.?.expectNotEqualStr(actual, expected);
 }
 
 pub fn expectNotEqual(actual: anytype, expected: anytype) !void {
-    try GlobalTestContext.?.expectNotEqual(expected, actual);
+    try GlobalTestContext.?.expectNotEqual(actual, expected);
 }
 
 pub fn expectError(actual: anytype, expected: anytype) !void {

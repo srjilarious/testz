@@ -108,9 +108,9 @@ pub const TestContext = struct {
         const idx = std.mem.indexOfDiff(u8, expected, actual);
         if (idx != null) {
             if (self.printColor) {
-                try self.handleTestError("Expected " ++ White ++ "\"{s}\"" ++ Reset ++ " to be \"{s}\". Differs at index {}, expected=\"{c}\", actual=\"{c}\"" ++ Reset, .{ expected, actual, idx.?, expected[idx.?], actual[idx.?] });
+                try self.handleTestError("Expected " ++ White ++ "\"{s}\"" ++ Reset ++ ", but got \"{s}\". Differs at index {}, expected=\"{c}\", actual=\"{c}\"" ++ Reset, .{ expected, actual, idx.?, expected[idx.?], actual[idx.?] });
             } else {
-                try self.handleTestError("Expected \"{s}\" to be \"{s}\". Differs at index {}, expected=\"{c}\", actual=\"{c}\"", .{ expected, actual, idx.?, expected[idx.?], actual[idx.?] });
+                try self.handleTestError("Expected \"{s}\", but got \"{s}\". Differs at index {}, expected=\"{c}\", actual=\"{c}\"", .{ expected, actual, idx.?, expected[idx.?], actual[idx.?] });
             }
             return error.TestExpectedEqual;
         }
@@ -139,6 +139,9 @@ pub const TestContext = struct {
                         .Optional => {
                             testFailed = (expected == null) or (payload != expected.?);
                         },
+                        .Null => {
+                            testFailed = true;
+                        },
                         else => {
                             testFailed = (expected != payload);
                         },
@@ -162,9 +165,9 @@ pub const TestContext = struct {
 
         if (testFailed) {
             if (self.printColor) {
-                try self.handleTestError("Expected " ++ White ++ "{any}" ++ Reset ++ " to be {any}" ++ Reset, .{ expected, actual });
+                try self.handleTestError("Expected " ++ White ++ "{any}" ++ Reset ++ ", but got {any}" ++ Reset, .{ expected, actual });
             } else {
-                try self.handleTestError("Expected {any} to be {any}", .{ expected, actual });
+                try self.handleTestError("Expected {any}, but got {any}", .{ expected, actual });
             }
             return error.TestExpectedEqual;
         }
@@ -173,9 +176,9 @@ pub const TestContext = struct {
     pub fn expectNotEqualStr(self: *TestContext, actual: []const u8, expected: []const u8) !void {
         if (std.mem.eql(u8, expected, actual) == true) {
             if (self.printColor) {
-                try self.handleTestError("Expected " ++ White ++ "\"{s}\"" ++ Reset ++ " to NOT be \"{s}\"" ++ Reset, .{ expected, actual });
+                try self.handleTestError("Did NOT expect " ++ White ++ "\"{s}\"" ++ Reset ++ " to be \"{s}\"" ++ Reset, .{ expected, actual });
             } else {
-                try self.handleTestError("Expected \"{s}\" to NOT be \"{s}\"", .{ expected, actual });
+                try self.handleTestError("Did NOT expect \"{s}\" to be \"{s}\"", .{ expected, actual });
             }
             return error.TestExpectedNotEqual;
         }
@@ -191,6 +194,9 @@ pub const TestContext = struct {
                     switch (@typeInfo(ExT)) {
                         .Optional => {
                             testPassed = (expected == null) or (payload != expected.?);
+                        },
+                        .Null => {
+                            testPassed = true;
                         },
                         else => {
                             testPassed = (expected != payload);
@@ -215,9 +221,9 @@ pub const TestContext = struct {
 
         if (!testPassed) {
             if (self.printColor) {
-                try self.handleTestError("Expected " ++ White ++ "{any}" ++ Reset ++ " to NOT be {any}" ++ Reset, .{ expected, actual });
+                try self.handleTestError("Did NOT expect " ++ White ++ "{any}" ++ Reset ++ " to be {any}" ++ Reset, .{ expected, actual });
             } else {
-                try self.handleTestError("Expected {any} to NOT be {any}", .{ expected, actual });
+                try self.handleTestError("Did NOT expect {any} to be {any}", .{ expected, actual });
             }
             return error.TestExpectedNotEqual;
         }

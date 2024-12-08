@@ -15,7 +15,7 @@ pub fn expectEqualFailTest() !void {
     const expected: []const u8 =
         \\
         \\X
-        \\FAIL expectEqualFailTest: Expected 10 to be 20
+        \\FAIL expectEqualFailTest: Expected 20, but got 10
         \\
         \\0 Passed, 1 Failed, 0 Skipped, 1 Total Tests ( XX.XX ms)
         \\
@@ -37,7 +37,7 @@ pub fn expectNotEqualFailTest() !void {
     const expected: []const u8 =
         \\
         \\X
-        \\FAIL expectNotEqualFailTest: Expected 10 to NOT be 10
+        \\FAIL expectNotEqualFailTest: Did NOT expect 10 to be 10
         \\
         \\0 Passed, 1 Failed, 0 Skipped, 1 Total Tests ( XX.XX ms)
         \\
@@ -59,7 +59,7 @@ pub fn expectEqualStrFailTest() !void {
     const expected: []const u8 =
         \\
         \\X
-        \\FAIL expectEqualStrFailTest: Expected "hello" to be "world". Differs at index 0, expected="h", actual="w"
+        \\FAIL expectEqualStrFailTest: Expected "world", but got "hello". Differs at index 0, expected="w", actual="h"
         \\
         \\0 Passed, 1 Failed, 0 Skipped, 1 Total Tests ( XX.XX ms)
         \\
@@ -81,7 +81,7 @@ pub fn expectNotEqualStrFailTest() !void {
     const expected: []const u8 =
         \\
         \\X
-        \\FAIL expectNotEqualStrFailTest: Expected "hello" to NOT be "hello"
+        \\FAIL expectNotEqualStrFailTest: Did NOT expect "hello" to be "hello"
         \\
         \\0 Passed, 1 Failed, 0 Skipped, 1 Total Tests ( XX.XX ms)
         \\
