@@ -54,6 +54,8 @@ pub const Option = struct {
     longName: []const u8,
     shortName: []const u8 = "",
     description: []const u8 = "",
+    // By default, an option can only appear once
+    maxOccurences: ?u8 = 1,
     minNumParams: ?u8 = null,
     maxNumParams: ?u8 = null,
     default: ?DefaultValue = null,
@@ -62,15 +64,26 @@ pub const Option = struct {
 pub const OptionResult = struct {
     name: []const u8,
     values: std.ArrayList([]const u8),
+    numOccurences: u8,
 
     pub fn init(name: []const u8) OptionResult {
         // TODO: fix allocator.
-        return .{ .name = name, .values = std.ArrayList([]const u8).init(std.heap.page_allocator) };
+        return .{
+            .name = name,
+            .values = std.ArrayList([]const u8).init(std.heap.page_allocator),
+            .numOccurences = 0,
+        };
     }
 
     pub fn deinit(self: *OptionResult) void {
         self.values.deinit();
     }
+};
+
+const OptionFindResult = struct {
+    opt: ?Option,
+    // The remainder of the short option text after finding a matching short option name.
+    remaining: []const u8,
 };
 
 pub const OptionList = struct {
@@ -127,14 +140,15 @@ pub const OptionList = struct {
         return null;
     }
 
-    pub fn findShortOption(self: *const OptionList, optName: []const u8) ?Option {
+    pub fn findShortOption(self: *const OptionList, optName: []const u8) OptionFindResult {
         for (self.data.items) |opt| {
-            if (std.mem.eql(u8, opt.shortName, optName)) {
-                return opt;
+            // Allow short option names to stack.
+            if (std.mem.startsWith(u8, optName, opt.shortName)) {
+                return .{ .opt = opt, .remaining = optName[opt.shortName.len..] };
             }
         }
 
-        return null;
+        return .{ .opt = null, .remaining = optName };
     }
 };
 
@@ -305,9 +319,13 @@ pub const ArgParser = struct {
     //     try self.options.addOptions(opts);
     //     return self;
     // }
+    //
+    // fn handleOption(parseResult: *ArgParserResult, opt: ?Option) {
+    //
+    // }
 
-    fn parseOption(parseText: *ArgQueue, parseResult: *ArgParserResult, availableOpts: *const OptionList, unsetOptions: *std.ArrayList([]const u8)) !?OptionResult {
-        if (parseText.len == 0) return null;
+    fn parseOption(parseText: *ArgQueue, parseResult: *ArgParserResult, availableOpts: *const OptionList, unsetOptions: *std.ArrayList([]const u8)) !void {
+        if (parseText.len == 0) return;
 
         const optFullName = parseText.first.?.data;
 
@@ -316,7 +334,7 @@ pub const ArgParser = struct {
         {
             _ = parseText.popFirst();
             parseResult.currItemPos += 1;
-            return null;
+            return;
         }
 
         var optName: []const u8 = undefined;
@@ -336,20 +354,54 @@ pub const ArgParser = struct {
                 _ = parseText.popFirst();
                 parseResult.currItemPos += 1;
                 try unsetOptions.append(optName);
-                return null;
+                return;
             } else {
                 opt = availableOpts.findLongOption(optName);
             }
-        } else if (optFullName[0] == '-') {
+        }
+        // Handle single (or stacked) short option(s)
+        else if (optFullName[0] == '-') {
             optName = optFullName[1..];
-            opt = availableOpts.findShortOption(optName);
+            while (optName.len > 0) {
+                const optFindResult = availableOpts.findShortOption(optName);
+                opt = optFindResult.opt;
+                if (optFindResult.opt == null) break;
+
+                const existing = parseResult.option(opt.?.longName);
+                var optResult = blk: {
+                    if (existing) |existingOptResult| {
+                        break :blk existingOptResult;
+                    } else {
+                        const ores = OptionResult.init(opt.?.longName);
+                        try parseResult.options.append(ores);
+                        break :blk parseResult.option(opt.?.longName).?;
+                    }
+                };
+                optResult.numOccurences += 1;
+                if (opt.?.maxOccurences != null) {
+                    if (optResult.numOccurences > opt.?.maxOccurences.?) {
+                        return error.TooManyOptionOccurences;
+                    }
+                }
+
+                optName = optFindResult.remaining;
+            }
         }
 
         _ = parseText.popFirst();
         parseResult.currItemPos += 1;
 
         if (opt != null) {
-            var optResult = OptionResult.init(opt.?.longName);
+            const existing = parseResult.option(opt.?.longName);
+            var optResult = blk: {
+                if (existing) |existingOptResult| {
+                    break :blk existingOptResult;
+                } else {
+                    const ores = OptionResult.init(opt.?.longName);
+                    try parseResult.options.append(ores);
+                    break :blk parseResult.option(opt.?.longName).?;
+                }
+            };
 
             var paramCounter: usize = 0;
             while (parseText.len > 0 and
@@ -362,11 +414,11 @@ pub const ArgParser = struct {
                     if (!std.ascii.isDigit(currVal[1])) break;
                 }
 
-                optResult.values.append(currVal) catch return null;
+                optResult.values.append(currVal) catch return;
                 _ = parseText.popFirst();
                 parseResult.currItemPos += 1;
 
-                paramCounter += 1;
+                // paramCounter += 1;
 
                 // std.debug.print("    Option param: {s}\n", .{currVal});
             }
@@ -374,13 +426,11 @@ pub const ArgParser = struct {
             if (opt.?.minNumParams != null and optResult.values.items.len < opt.?.minNumParams.?) {
                 return ParseError.TooFewOptionParams;
             }
-
-            return optResult;
         } else {
             return ParseError.UnknownOption;
         }
 
-        return null;
+        return;
     }
 
     fn isNextItemLikelyAnOption(queue: *const ArgQueue) bool {
@@ -416,10 +466,7 @@ pub const ArgParser = struct {
             if (frontData.len > 1 and std.ascii.isDigit(frontData[1])) break;
 
             // TODO: change to catching and adding a better error.
-            const optRes = try parseOption(parseText, parseResult, availableOpts, unsetOptions);
-            if (optRes != null) {
-                try parseResult.options.append(optRes.?);
-            }
+            try parseOption(parseText, parseResult, availableOpts, unsetOptions);
         }
     }
 
@@ -562,7 +609,7 @@ pub const ArgParserResult = struct {
         return false;
     }
 
-    pub fn option(self: *ArgParserResult, optName: []const u8) ?*OptionResult {
+    pub fn option(self: *const ArgParserResult, optName: []const u8) ?*OptionResult {
         for (0..self.options.items.len) |idx| {
             const o = &self.options.items[idx];
             if (std.mem.eql(u8, o.name, optName)) {
@@ -574,7 +621,7 @@ pub const ArgParserResult = struct {
     }
 
     // Get the first value if it exists.
-    pub fn optionVal(self: *ArgParserResult, optName: []const u8) ?[]const u8 {
+    pub fn optionVal(self: *const ArgParserResult, optName: []const u8) ?[]const u8 {
         if (self.option(optName)) |o| {
             if (o.values.items.len > 0) {
                 return o.values.items[0];
@@ -582,5 +629,55 @@ pub const ArgParserResult = struct {
         }
 
         return null;
+    }
+
+    pub fn optionValOrDefault(self: *const ArgParserResult, optName: []const u8, default: []const u8) []const u8 {
+        if (self.option(optName)) |o| {
+            if (o.values.items.len > 0) {
+                return o.values.items[0];
+            }
+        }
+
+        return default;
+    }
+
+    pub fn optionNumVal(self: *const ArgParserResult, comptime T: type, optName: []const u8) !T {
+        const optVal = self.optionVal(optName);
+        if (optVal == null) return error.UnknownOption;
+
+        switch (T) {
+            u8, u16, u32, u64 => {
+                return try std.fmt.parseUnsigned(T, optVal.?, 0);
+            },
+            i8, i16, i32, i64 => {
+                return try std.fmt.parseInt(T, optVal.?, 0);
+            },
+            f32, f64 => {
+                return try std.fmt.parseFloat(T, optVal.?);
+            },
+            else => {
+                return error.UnhandledOptionType;
+            },
+        }
+    }
+
+    pub fn optionNumValOrDefault(self: *ArgParserResult, comptime T: type, optName: []const u8, default: T) !T {
+        const optVal = self.optionVal(optName);
+        if (optVal == null) return default;
+
+        switch (T) {
+            u8, u16, u32, u64 => {
+                return try std.fmt.parseUnsigned(T, optVal.?, 0);
+            },
+            i8, i16, i32, i64 => {
+                return try std.fmt.parseInt(T, optVal.?, 0);
+            },
+            f32, f64 => {
+                return try std.fmt.parseFloat(T, optVal.?);
+            },
+            else => {
+                return error.UnhandledOptionType;
+            },
+        }
     }
 };

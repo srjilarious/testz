@@ -1,6 +1,8 @@
 // Example main unit test runner using testz.
 const std = @import("std");
-const add = @import("example").add;
+const example = @import("example");
+const add = example.add;
+const possibleError = example.possibleError;
 const testz = @import("testz");
 
 const LocalExampleTests = struct {
@@ -19,6 +21,10 @@ const LocalExampleTests = struct {
 
     pub fn gonnaFailTest() !void {
         try testz.expectEqual(add(1, 2), 12);
+    }
+
+    pub fn checkError() !void {
+        try testz.expectError(possibleError(false), error.BadStuff);
     }
 };
 

@@ -2,7 +2,7 @@
 ![Testz Logo](images/testz.png)
 
 
-![Version Badge](https://img.shields.io/badge/Version-0.5.2-brightgreen)
+![Version Badge](https://img.shields.io/badge/Version-0.6.0-brightgreen)
 ![Zig Version Badge](https://img.shields.io/badge/Zig%20Version-0.13.0-%23f7a41d?logo=zig)
 ![License Badge](https://img.shields.io/badge/License-MIT-blue)
 
