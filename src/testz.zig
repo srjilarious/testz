@@ -119,6 +119,10 @@ pub fn expectNotEqual(actual: anytype, expected: anytype) !void {
     try GlobalTestContext.?.expectNotEqual(expected, actual);
 }
 
+pub fn expectError(actual: anytype, expected: anytype) !void {
+    try GlobalTestContext.?.expectError(actual, expected);
+}
+
 fn printChars(writer: *Printer, ch: []const u8, num: usize) !void {
     var n = num;
     while (n > 0) {

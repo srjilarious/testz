@@ -116,6 +116,18 @@ pub const TestContext = struct {
         }
     }
 
+    // pub fn expectEqualArr(self: *TestContext, T: anytype, actual: []const T, expected: []const T) !void {
+    //     const idx = std.mem.indexOfDiff(u8, expected, actual);
+    //     if (idx != null) {
+    //         if (self.printColor) {
+    //             try self.handleTestError("Expected " ++ White ++ "\"{s}\"" ++ Reset ++ " to be \"{s}\". Differs at index {}, expected=\"{c}\", actual=\"{c}\"" ++ Reset, .{ expected, actual, idx.?, expected[idx.?], actual[idx.?] });
+    //         } else {
+    //             try self.handleTestError("Expected \"{s}\" to be \"{s}\". Differs at index {}, expected=\"{c}\", actual=\"{c}\"", .{ expected, actual, idx.?, expected[idx.?], actual[idx.?] });
+    //         }
+    //         return error.TestExpectedEqual;
+    //     }
+    // }
+
     pub fn expectEqual(self: *TestContext, actual: anytype, expected: anytype) !void {
         const T = @TypeOf(actual);
         const ExT = @TypeOf(expected);
@@ -208,6 +220,36 @@ pub const TestContext = struct {
                 try self.handleTestError("Expected {any} to NOT be {any}", .{ expected, actual });
             }
             return error.TestExpectedNotEqual;
+        }
+    }
+
+    pub fn expectError(self: *TestContext, actual: anytype, expected: anyerror) !void {
+        const T = @TypeOf(actual);
+        switch (@typeInfo(T)) {
+            .ErrorUnion => {
+                if (actual) |a| {
+                    if (self.printColor) {
+                        try self.handleTestError("Expected error " ++ White ++ "\"{!}\"" ++ Reset ++ ", but got \"{any}\"" ++ Reset, .{ expected, a });
+                    } else {
+                        try self.handleTestError("Expected error \"{!}\", but got \"{any}\"", .{ expected, a });
+                    }
+
+                    return error.TestExpectedError;
+                } else |e| {
+                    if (e != expected) {
+                        if (self.printColor) {
+                            try self.handleTestError("Expected " ++ White ++ "\"{!}\"" ++ Reset ++ ", but got \"{!}\"" ++ Reset, .{ actual, e });
+                        } else {
+                            try self.handleTestError("Expected \"{!}\", but got \"{!}\"", .{ actual, e });
+                        }
+
+                        return error.TestExpectedError;
+                    }
+                }
+            },
+            else => {
+                @compileError("Expected an error or error union type in expectError!");
+            },
         }
     }
 };

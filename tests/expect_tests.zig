@@ -193,3 +193,30 @@ pub fn expectNotEqualOptionalOkTest() !void {
         .group = .{ .name = "Expect", .tag = "expect" },
     }, expected, .{});
 }
+
+//-------------------------------------------------------------------------------------------------
+fn errorFuncA(foo: bool) !i32 {
+    if (foo) return 32;
+    return error.FooError;
+}
+
+fn expectErrorTestInternal() !void {
+    // Check comparing two error types directly
+    try testz.expectError(errorFuncA(false), error.FooError);
+}
+
+pub fn expectErrorTest() !void {
+    const expected: []const u8 =
+        \\
+        \\⋅
+        \\
+        \\1 Passed, 0 Failed, 0 Skipped, 1 Total Tests ( XX.XX ms)
+        \\
+    ;
+
+    try runInternal(.{
+        .func = expectErrorTestInternal,
+        .name = "expectErrorTestInternal",
+        .group = .{ .name = "Expect", .tag = "expect" },
+    }, expected, .{});
+}
