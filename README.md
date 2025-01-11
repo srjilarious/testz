@@ -11,32 +11,36 @@
 Testz is a testing library for zig that provides some extra features compared to the built in unit testing.
 
 - Color output with both a verbose mode and non-verbose mode
+  - A non-verbose mode, where each test shows as a symbol for passed, skipped, or failed:
+    
+    ![non-verbose output](images/non_verbose_output.png)
+
   - In verbose mode, you can see the name of each test run and how long it took to run.
+
+    ![Failing test example, verbose output](images/verbose_output.png)
+
   - In both cases a test run summary lets you know how many tests ran and the overall time.
+
 - Easy filtering by group tag or test name itself
   - Making it easier to set a breakpoint and debug a single test.
+
 - Stack traces of relevant code only
   - Skips stack frames from `testz` itself as well as `main` where the test runner is called.
+  - Stack traces provide context lines around the stack frame.
+
 - Provides a test runner utility function with argument parsing for a default use case.
+
 - Has a test discovery helper that searches for tests by finding public functions in a passed in module, allowing tests to be skipped by prepending `skip_` to the start of the function name.
 
 Testz runners are just another executable you setup in your `build.zig`, with the library providing a number of helpers to make it as easy as possible to create tests.  Debugging is simple since you can run your debugger just like with any normal flat executable and use the built in filtering to narrow down what test or set of tests gets run.
 
 # Example
 
-Here's what the example project running a couple of tests in non-verbose mode looks like:
+Check the example program under `example/` with a main program and a separate test program. 
 
-![non-verbose output](images/non_verbose_output.png)
+## Test module
 
-Here's the verbose mode of output from the example project:
-
-![Failing test example, verbose output](images/verbose_output.png)
-
-## Code example
-
-### Test module
-
-Here's what a module of tests looks like:
+A module of tests looks like:
 
 ```zig
 const std = @import("std");
@@ -70,7 +74,7 @@ The test functions are simply any public function in a module you pass into `dis
 
 ### Test Runner 
 
-Here is an example test runner program that you would create in your project.  It shows test discovery and using the built in test runner with standard argument parsing.
+This is a test runner program using the built-in `testzRunner` method that you could use in your project, which handles standard argument parsing.  It also shows test discovery by passing in modules as groups to the `discoverTests` method.
 
 ```tests/main.zig
 const std = @import("std");
