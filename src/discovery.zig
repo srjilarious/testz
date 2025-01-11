@@ -20,11 +20,11 @@ pub const DiscoverOpts = struct {
 
 pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type, opts: DiscoverOpts) []const TestFuncInfo {
     comptime var numTests: usize = 0;
-    const decls = @typeInfo(mod).Struct.decls;
+    const decls = @typeInfo(mod).@"struct".decls;
     inline for (decls) |decl| {
         const fld = @field(mod, decl.name);
         const ti = @typeInfo(@TypeOf(fld));
-        if (ti == .Fn) {
+        if (ti == .@"fn") {
             if (opts.testsEndWithTest and std.mem.endsWith(u8, decl.name, "Test")) {
                 numTests += 1;
             } else {
@@ -38,7 +38,7 @@ pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type, 
     inline for (decls) |decl| {
         const fld = @field(mod, decl.name);
         const ti = @typeInfo(@TypeOf(fld));
-        if (ti == .Fn) {
+        if (ti == .@"fn") {
             if (opts.debugDiscovery) {
                 @compileLog("Evaluating function:", decl.name);
             }
@@ -93,11 +93,11 @@ pub fn discoverTests(comptime mods: anytype, opts: DiscoverOpts) []const TestFun
     comptime var currGroup: TestGroup = undefined;
     const ModsType = @TypeOf(mods);
     const modsTypeInfo = @typeInfo(ModsType);
-    if (modsTypeInfo != .Struct) {
+    if (modsTypeInfo != .@"struct") {
         @compileError("expected tuple or struct argument of modules, found " ++ @typeName(ModsType));
     }
 
-    const fieldsInfo = modsTypeInfo.Struct.fields;
+    const fieldsInfo = modsTypeInfo.@"struct".fields;
     inline for (fieldsInfo) |_| {
         const fieldName = std.fmt.comptimePrint("{}", .{fieldIdx});
         const currIndexItem = @field(mods, fieldName);
@@ -122,7 +122,7 @@ pub fn discoverTests(comptime mods: anytype, opts: DiscoverOpts) []const TestFun
             const groupMods = @field(currIndexItem, "mods");
             const groupModType = @TypeOf(groupMods);
             const groupModTypeInfo = @typeInfo(groupModType);
-            if (groupModTypeInfo == .Pointer) {
+            if (groupModTypeInfo == .pointer) {
                 for (groupMods) |currMod| {
                     totalTests = addModuleTests(&tests, currMod, currGroup, opts, totalTests);
                 }

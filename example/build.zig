@@ -37,7 +37,7 @@ pub fn build(b: *std.Build) void {
     });
 
     // Add our library as a dependency of the exe.
-    exe.root_module.addImport("example", &lib.root_module);
+    exe.root_module.addImport("example", lib.root_module);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -85,7 +85,7 @@ pub fn build(b: *std.Build) void {
     });
 
     // Add our library as a dependency of the exe.
-    testsExe.root_module.addImport("example", &lib.root_module);
+    testsExe.root_module.addImport("example", lib.root_module);
 
     // Add testz as a dependency as well.
     testsExe.root_module.addImport("testz", testzMod.module("testz"));

@@ -124,7 +124,7 @@ const ArrayPrinterData = struct {
 pub const Printer = union(enum) {
     file: *FilePrinterData,
     array: *ArrayPrinterData,
-    debug: bool,
+    _debug: bool,
     
     pub fn stdout(alloc: std.mem.Allocator) !Printer {
         var f = try alloc.create(FilePrinterData);
@@ -144,7 +144,7 @@ pub const Printer = union(enum) {
     }
 
     pub fn debug() Printer {
-        return .{ .debug = true };
+        return .{ ._debug = true };
     }
 
     pub fn deinit(self: *Printer) void {
@@ -165,7 +165,7 @@ pub const Printer = union(enum) {
         switch(self.*) {
             .array => |_| try self.array.bufferWriter.writer().print(format, args),
             .file => |_| try self.file.bufferWriter.writer().print(format, args),
-            .debug => |_| std.debug.print(format, args),
+            ._debug => |_| std.debug.print(format, args),
         }
     }
 
@@ -182,14 +182,14 @@ pub const Printer = union(enum) {
         switch(self.*) {
             .array => |_| try self.array.bufferWriter.flush(),
             .file => |_| try self.file.bufferWriter.flush(),
-            .debug => {},
+            ._debug => {},
         }
     }
 
     pub fn supportsColor(self: *const Printer) bool {
         switch(self.*) {
             .file => |f| return f.colorOutput,
-            .debug => |_| return std.io.getStdErr().supportsAnsiEscapeCodes(),
+            ._debug => |_| return std.io.getStdErr().supportsAnsiEscapeCodes(),
             else => { return false; },
         }
     }
