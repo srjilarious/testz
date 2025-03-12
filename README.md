@@ -2,11 +2,9 @@
 ![Testz Logo](images/testz.png)
 
 
-![Version Badge](https://img.shields.io/badge/Version-0.7.0-brightgreen)
-![Zig Version Badge](https://img.shields.io/badge/Zig%20Version-0.14.0--dev2628%2B5b5c60f43-%23f7a41d?logo=zig)
+![Version Badge](https://img.shields.io/badge/Version-0.6.1-brightgreen)
+![Zig Version Badge](https://img.shields.io/badge/Zig%20Version-0.14.0-%23f7a41d?logo=zig)
 ![License Badge](https://img.shields.io/badge/License-MIT-blue)
-
-#f7a41d
 
 # Overview
 
@@ -29,9 +27,6 @@ Testz is a testing library for zig that provides some extra features compared to
 - Provides a test runner utility function with argument parsing for a default use case.
 
 - Has a test discovery helper that searches for tests by finding public functions in a passed in module, allowing tests to be skipped by prepending `skip_` to the start of the function name.
-
-[!Note]
-Stack traces with extra context not yet implemented for Zig 0.14.
 
 - Stack traces of relevant code only 
   - Skips stack frames from `testz` itself as well as `main` where the test runner is called.

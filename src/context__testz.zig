@@ -266,7 +266,7 @@ pub const TestContext = struct {
 // Stack tracing helpers
 // Code mostly pulled from std.debug directly.
 // ----------------------------------------------------------------------------
-fn printLinesFromFileAnyOs(out_stream: anytype, line_info: std.debug.LineInfo, context_amount: u64, printColor: bool) !void {
+fn printLinesFromFileAnyOs(out_stream: anytype, line_info: std.debug.SourceLocation, context_amount: u64, printColor: bool) !void {
     // Need this to always block even in async I/O mode, because this could potentially
     // be called from e.g. the event loop code crashing.
     var f = try std.fs.cwd().openFile(line_info.file_name, .{});
@@ -276,7 +276,7 @@ fn printLinesFromFileAnyOs(out_stream: anytype, line_info: std.debug.LineInfo, c
     const min_line: u64 = line_info.line -| context_amount;
     const max_line: u64 = line_info.line +| context_amount;
 
-    var buf: [std.mem.page_size]u8 = undefined;
+    var buf: [2048]u8 = undefined;
     var line: usize = 1;
     var column: usize = 1;
     while (true) {
@@ -320,7 +320,7 @@ fn printLinesFromFileAnyOs(out_stream: anytype, line_info: std.debug.LineInfo, c
 
         if (line > max_line) return;
 
-        if (amt_read < buf.len) return error.EndOfFile;
+        if (amt_read < buf.len) return; // error.EndOfFile;
     }
 }
 
@@ -328,129 +328,128 @@ fn printLinesFromFileAnyOs(out_stream: anytype, line_info: std.debug.LineInfo, c
 // Modified to print out more context from the file and add some
 // extra highlighting.
 fn printStackTrace(failure: *TestFailure, printColor: bool) !void {
-    _ = printColor;
-    nosuspend {
-        if (comptime builtin.target.isWasm()) {
-            if (native_os == .wasi) {
-                const stderr = io.getStdErr().writer();
-                stderr.print("Unable to dump stack trace: not implemented for Wasm\n", .{}) catch return;
+    // nosuspend {
+    if (comptime builtin.target.cpu.arch.isWasm()) {
+        if (native_os == .wasi) {
+            const stderr = io.getStdErr().writer();
+            stderr.print("Unable to dump stack trace: not implemented for Wasm\n", .{}) catch return;
+        }
+        return;
+    }
+    const stderr = io.getStdErr().writer();
+
+    //     var trace = StringBuilder.init(failure.alloc);
+    //     try trace.ensureTotalCapacity(2048);
+    //     const out_stream = trace.writer();
+    //     defer trace.deinit();
+
+    if (builtin.strip_debug_info) {
+        stderr.print("Unable to dump stack trace: debug info stripped\n", .{}) catch return;
+        return;
+    }
+    const debug_info = std.debug.getSelfDebugInfo() catch |err| {
+        stderr.print("Unable to dump stack trace: Unable to open debug info: {s}\n", .{@errorName(err)}) catch return;
+        return;
+    };
+
+    //     const tty_config = io.tty.detectConfig(std.io.getStdErr());
+
+    //     if (native_os == .windows) {
+    //         var context: std.debug.ThreadContext = undefined;
+    //         std.debug.assert(std.debug.getContext(&context));
+    //         return std.debug.writeStackTraceWindows(stderr, debug_info, tty_config, &context, start_addr);
+    //     }
+    var context: std.debug.ThreadContext = undefined;
+    const has_context = std.debug.getContext(&context);
+
+    var it = (if (has_context) blk: {
+        break :blk std.debug.StackIterator.initWithContext(null, debug_info, &context) catch null;
+    } else null) orelse std.debug.StackIterator.init(null, null);
+    defer it.deinit();
+
+    //     while (it.next()) |return_address| {
+    //         printLastUnwindError(&it, debug_info, out_stream, tty_config);
+
+    //         // On arm64 macOS, the address of the last frame is 0x0 rather than 0x1 as on x86_64 macOS,
+    //         // therefore, we do a check for `return_address == 0` before subtracting 1 from it to avoid
+    //         // an overflow. We do not need to signal `StackIterator` as it will correctly detect this
+    //         // condition on the subsequent iteration and return `null` thus terminating the loop.
+    //         // same behaviour for x86-windows-msvc
+    //         const address = return_address -| 1;
+    //         try printSourceAtAddress(debug_info, out_stream, address, tty_config);
+    //     } else printLastUnwindError(&it, debug_info, out_stream, tty_config);
+
+    //     // std.debug.writeCurrentStackTrace(out_stream, debug_info, tty_config, null) catch |err| {
+    //     //     stderr.print("Unable to dump stack trace: {s}\n", .{@errorName(err)}) catch return;
+    //     //     return;
+    //     // };
+
+    //     failure.stackTrace = try trace.toOwnedSlice();
+    // }
+
+    var trace = StringBuilder.init(failure.alloc);
+    // Preallocate some space for the stack trace.
+    try trace.ensureTotalCapacity(2048);
+    const out_stream = trace.writer();
+    defer trace.deinit();
+    var first = true;
+    while (it.next()) |return_address| {
+        const module = debug_info.getModuleForAddress(return_address) catch {
+            break;
+            // switch (err) {
+            //     error.MissingDebugInfo, error.InvalidDebugInfo => return err, //printUnknownSource(debug_info, out_stream, address, tty_config),
+            //     else => return err,
+            // }
+        };
+
+        const symbol_info = module.getSymbolAtAddress(debug_info.allocator, return_address) catch {
+            break;
+            // switch (err) {
+            //     error.MissingDebugInfo, error.InvalidDebugInfo => , // printUnknownSource(debug_info, out_stream, address, tty_config),
+            //     else => return err,
+            // }
+        };
+        defer if (symbol_info.source_location) |sl| debug_info.allocator.free(sl.file_name);
+
+        if (std.mem.eql(u8, symbol_info.name, "posixCallMainAndExit"))
+            break;
+
+        const line_info = symbol_info.source_location;
+        if (line_info) |*li| {
+
+            // Skip printing frames within the framework.
+            if (std.mem.endsWith(u8, li.file_name, "__testz.zig")) continue;
+            if (std.mem.endsWith(u8, li.file_name, "/testz.zig")) continue;
+            // Skip over the call to runTests, assuming it's in `main`
+            if (std.mem.eql(u8, symbol_info.name, "main")) continue;
+
+            // std.debug.print("*** Symbol: {s}, {s}\n", .{symbol_info.symbol_name, symbol_info.compile_unit_name});
+            if (printColor) {
+                std.fmt.format(out_stream, "\n{s}:" ++ White ++ "{d}" ++ Reset ++ ":{d}:\n", .{ li.file_name, li.line, li.column }) catch break;
+            } else {
+                std.fmt.format(out_stream, "\n{s}:{d}:{d}:\n", .{ li.file_name, li.line, li.column }) catch break;
             }
-            return;
+
+            if (first) {
+                failure.lineNo = li.line;
+                first = false;
+            }
+        } else {
+            _ = out_stream.write("???:?:?\n") catch break;
         }
-        const stderr = io.getStdErr().writer();
 
-        var trace = StringBuilder.init(failure.alloc);
-        try trace.ensureTotalCapacity(2048);
-        const out_stream = trace.writer();
-        defer trace.deinit();
+        // try stderr.print(" 0x{x} in {s} ({s})\n\n", .{ return_address, symbol_info.symbol_name, symbol_info.compile_unit_name });
 
-        if (builtin.strip_debug_info) {
-            stderr.print("Unable to dump stack trace: debug info stripped\n", .{}) catch return;
-            return;
+        if (line_info) |li| {
+            printLinesFromFileAnyOs(out_stream, li, 3, printColor) catch {};
         }
-        const debug_info = std.debug.getSelfDebugInfo() catch |err| {
-            stderr.print("Unable to dump stack trace: Unable to open debug info: {s}\n", .{@errorName(err)}) catch return;
-            return;
-        };
-
-        const tty_config = io.tty.detectConfig(std.io.getStdErr());
-
-        // if (native_os == .windows) {
-        //     var context: std.debug.ThreadContext = undefined;
-        //     std.debug.assert(std.debug.getContext(&context));
-        //     return std.debug.writeStackTraceWindows(stderr, debug_info, tty_config, &context, start_addr);
-        // }
-        // var context: ThreadContext = undefined;
-        // const has_context = getContext(&context);
-
-        // var it = (if (has_context) blk: {
-        //     break :blk StackIterator.initWithContext(start_addr, debug_info, &context) catch null;
-        // } else null) orelse StackIterator.init(start_addr, null);
-        // defer it.deinit();
-
-        // while (it.next()) |return_address| {
-        //     printLastUnwindError(&it, debug_info, out_stream, tty_config);
-
-        //     // On arm64 macOS, the address of the last frame is 0x0 rather than 0x1 as on x86_64 macOS,
-        //     // therefore, we do a check for `return_address == 0` before subtracting 1 from it to avoid
-        //     // an overflow. We do not need to signal `StackIterator` as it will correctly detect this
-        //     // condition on the subsequent iteration and return `null` thus terminating the loop.
-        //     // same behaviour for x86-windows-msvc
-        //     const address = return_address -| 1;
-        //     try printSourceAtAddress(debug_info, out_stream, address, tty_config);
-        // } else printLastUnwindError(&it, debug_info, out_stream, tty_config);
-
-        std.debug.writeCurrentStackTrace(out_stream, debug_info, tty_config, null) catch |err| {
-            stderr.print("Unable to dump stack trace: {s}\n", .{@errorName(err)}) catch return;
-            return;
-        };
-
-        failure.stackTrace = try trace.toOwnedSlice();
     }
 
-    // var trace = StringBuilder.init(failure.alloc);
-    // // Preallocate some space for the stack trace.
-    // try trace.ensureTotalCapacity(2048);
-    // const out_stream = trace.writer();
-    // defer trace.deinit();
-    // var first = true;
-    // while (it.next()) |return_address| {
-    //     const module = debug_info.getModuleForAddress(return_address) catch {
-    //         break;
-    //         // switch (err) {
-    //         //     error.MissingDebugInfo, error.InvalidDebugInfo => return err, //printUnknownSource(debug_info, out_stream, address, tty_config),
-    //         //     else => return err,
-    //         // }
-    //     };
+    if (first) {
+        std.fmt.format(out_stream, "No printable stack frames.", .{}) catch {};
+    }
 
-    //     const symbol_info = module.getSymbolAtAddress(debug_info.allocator, return_address) catch {
-    //         break;
-    //         // switch (err) {
-    //         //     error.MissingDebugInfo, error.InvalidDebugInfo => , // printUnknownSource(debug_info, out_stream, address, tty_config),
-    //         //     else => return err,
-    //         // }
-    //     };
-    //     defer symbol_info.deinit(debug_info.allocator);
-
-    //     if (std.mem.eql(u8, symbol_info.name, "posixCallMainAndExit"))
-    //         break;
-
-    //     const line_info = symbol_info.line_info;
-    //     if (line_info) |*li| {
-
-    //         // Skip printing frames within the framework.
-    //         if (std.mem.endsWith(u8, li.file_name, "__testz.zig")) continue;
-    //         if (std.mem.endsWith(u8, li.file_name, "/testz.zig")) continue;
-    //         // Skip over the call to runTests, assuming it's in `main`
-    //         if (std.mem.eql(u8, symbol_info.symbol_name, "main")) continue;
-
-    //         // std.debug.print("*** Symbol: {s}, {s}\n", .{symbol_info.symbol_name, symbol_info.compile_unit_name});
-    //         if (printColor) {
-    //             std.fmt.format(out_stream, "\n{s}:" ++ White ++ "{d}" ++ Reset ++ ":{d}:\n", .{ li.file_name, li.line, li.column }) catch break;
-    //         } else {
-    //             std.fmt.format(out_stream, "\n{s}:{d}:{d}:\n", .{ li.file_name, li.line, li.column }) catch break;
-    //         }
-
-    //         if (first) {
-    //             failure.lineNo = li.line;
-    //             first = false;
-    //         }
-    //     } else {
-    //         _ = out_stream.write("???:?:?\n") catch break;
-    //     }
-
-    //     // try stderr.print(" 0x{x} in {s} ({s})\n\n", .{ return_address, symbol_info.symbol_name, symbol_info.compile_unit_name });
-
-    //     if (line_info) |li| {
-    //         printLinesFromFileAnyOs(out_stream, li, 3, printColor) catch {};
-    //     }
-    // }
-
-    // if (first) {
-    //     std.fmt.format(out_stream, "No printable stack frames.", .{}) catch {};
-    // }
-
-    // failure.stackTrace = try trace.toOwnedSlice();
+    failure.stackTrace = try trace.toOwnedSlice();
 
     // std.debug.writeCurrentStackTrace(stderr, debug_info, std.io.tty.detectConfig(std.io.getStdErr()), null) catch |err| {
     //     stderr.print("Unable to dump stack trace: {s}\n", .{@errorName(err)}) catch return;

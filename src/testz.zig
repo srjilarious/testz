@@ -111,6 +111,10 @@ pub fn expectEqual(actual: anytype, expected: anytype) !void {
     try GlobalTestContext.?.expectEqual(actual, expected);
 }
 
+pub fn expectEqualT(comptime T: type, actual: T, expected: T) !void {
+    try GlobalTestContext.?.expectEqual(actual, expected);
+}
+
 pub fn expectNotEqualStr(actual: []const u8, expected: []const u8) !void {
     try GlobalTestContext.?.expectNotEqualStr(actual, expected);
 }
