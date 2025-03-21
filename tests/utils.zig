@@ -28,5 +28,5 @@ pub fn runInternal(func: TestFuncInfo, expectedOutput: []const u8, opts: struct 
     });
 
     // Check our test output.
-    try testz.expectEqualStr(expectedOutput, printer.array.array.items);
+    try testz.expectEqualStr(printer.array.array.items, expectedOutput);
 }

@@ -110,9 +110,17 @@ pub const TestContext = struct {
         const idx = std.mem.indexOfDiff(u8, expected, actual);
         if (idx != null) {
             if (self.printColor) {
-                try self.handleTestError("Expected " ++ White ++ "\"{s}\"" ++ Reset ++ ", but got \"{s}\". Differs at index {}, expected=\"{c}\", actual=\"{c}\"" ++ Reset, .{ expected, actual, idx.?, expected[idx.?], actual[idx.?] });
+                if (actual.len == expected.len) {
+                    try self.handleTestError("Expected " ++ White ++ "\"{s}\"" ++ Reset ++ ", but got \"{s}\". Differs at index {}, expected=\"{c}\", actual=\"{c}\"" ++ Reset, .{ expected, actual, idx.?, expected[idx.?], actual[idx.?] });
+                } else {
+                    try self.handleTestError("Expected " ++ White ++ "\"{s}\"" ++ Reset ++ ", but got \"{s}\". Lengths differ {} versus {}" ++ Reset, .{ expected, actual, expected.len, actual.len });
+                }
             } else {
-                try self.handleTestError("Expected \"{s}\", but got \"{s}\". Differs at index {}, expected=\"{c}\", actual=\"{c}\"", .{ expected, actual, idx.?, expected[idx.?], actual[idx.?] });
+                if (actual.len == expected.len) {
+                    try self.handleTestError("Expected \"{s}\", but got \"{s}\". Differs at index {}, expected=\"{c}\", actual=\"{c}\"", .{ expected, actual, idx.?, expected[idx.?], actual[idx.?] });
+                } else {
+                    try self.handleTestError("Expected \"{s}\", but got \"{s}\". Lengths differ {} versus {}", .{ expected, actual, expected.len, actual.len });
+                }
             }
             return error.TestExpectedEqual;
         }
@@ -352,13 +360,13 @@ fn printStackTrace(failure: *TestFailure, printColor: bool) !void {
         return;
     };
 
-    //     const tty_config = io.tty.detectConfig(std.io.getStdErr());
+    if (native_os == .windows) {
+        var context: std.debug.ThreadContext = undefined;
+        const tty_config = io.tty.detectConfig(std.io.getStdErr());
+        std.debug.assert(std.debug.getContext(&context));
+        return std.debug.writeStackTraceWindows(stderr, debug_info, tty_config, &context, null);
+    }
 
-    //     if (native_os == .windows) {
-    //         var context: std.debug.ThreadContext = undefined;
-    //         std.debug.assert(std.debug.getContext(&context));
-    //         return std.debug.writeStackTraceWindows(stderr, debug_info, tty_config, &context, start_addr);
-    //     }
     var context: std.debug.ThreadContext = undefined;
     const has_context = std.debug.getContext(&context);
 

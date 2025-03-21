@@ -73,6 +73,28 @@ pub fn expectEqualStrFailTest() !void {
 }
 
 //-------------------------------------------------------------------------------------------------
+fn expectEqualStrFailFirstLongerTestInternal() !void {
+    try testz.expectEqualStr("worldthere", "world");
+}
+
+pub fn expectEqualStrFailFirstLongerTest() !void {
+    const expected: []const u8 =
+        \\
+        \\X
+        \\FAIL expectEqualStrFailFirstLongerTest: Expected "world", but got "worldthere". Lengths differ 5 versus 10
+        \\
+        \\0 Passed, 1 Failed, 0 Skipped, 1 Total Tests ( XX.XX ms)
+        \\
+    ;
+
+    try runInternal(.{
+        .func = expectEqualStrFailFirstLongerTestInternal,
+        .name = "expectEqualStrFailFirstLongerTest",
+        .group = .{ .name = "Default", .tag = "default" },
+    }, expected, .{});
+}
+
+//-------------------------------------------------------------------------------------------------
 fn expectNotEqualStrFailTestInternal() !void {
     try testz.expectNotEqualStr("hello", "hello");
 }
