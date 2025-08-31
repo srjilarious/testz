@@ -104,13 +104,13 @@ pub const HelpFormatter = struct
 
             if(!groups.contains(groupName)) {
                 var group = try alloc.create(CommandGroup);
-                group.* = CommandGroup.init(alloc);
+                group.* = CommandGroup{};
 
-                try group.append(cmd);
+                try group.append(alloc, cmd);
                 try groups.put(groupName, group);
             } else {
                 var group = groups.get(groupName).?;
-                try group.append(cmd);
+                try group.append(alloc, cmd);
             }
         }
 

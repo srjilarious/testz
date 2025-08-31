@@ -39,13 +39,14 @@ pub const GroupList = struct {
 pub const TestFuncGroup = struct {
     name: []const u8,
     tests: std.ArrayList(TestFuncInfo),
+    alloc: std.mem.Allocator,
 
     pub fn init(name: []const u8, alloc: std.mem.Allocator) TestFuncGroup {
-        return .{ .name = name, .tests = std.ArrayList(TestFuncInfo).init(alloc) };
+        return .{ .name = name, .tests = .{}, .alloc = alloc };
     }
 
     pub fn deinit(self: *TestFuncGroup) void {
-        self.tests.deinit();
+        self.tests.deinit(self.alloc);
     }
 };
 

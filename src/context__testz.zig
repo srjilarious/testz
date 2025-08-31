@@ -29,7 +29,7 @@ pub const TestContext = struct {
 
     pub fn init(alloc: std.mem.Allocator, opts: struct { verbose: bool = false, printStackTraceOnFail: bool = true, printColor: bool = true }) TestContext {
         return .{
-            .failures = std.ArrayList(TestFailure).init(alloc),
+            .failures = .{},
             .alloc = alloc,
             .verbose = opts.verbose,
             .printStackTraceOnFail = opts.printStackTraceOnFail,
@@ -44,7 +44,7 @@ pub const TestContext = struct {
             fv.deinit();
         }
 
-        self.failures.deinit();
+        self.failures.deinit(self.alloc);
     }
 
     pub fn setCurrentTest(self: *TestContext, name: []const u8) void {
@@ -52,11 +52,15 @@ pub const TestContext = struct {
     }
 
     fn formatOwnedSliceMessage(alloc: std.mem.Allocator, comptime fmt: []const u8, params: anytype) ![]const u8 {
-        var msgBuilder = StringBuilder.init(alloc);
-        defer msgBuilder.deinit();
-        const writer = msgBuilder.writer();
-        try std.fmt.format(writer, fmt, params);
-        return msgBuilder.toOwnedSlice();
+        _ = alloc;
+        _ = fmt;
+        _ = params;
+        // var msgBuilder: StringBuilder = .{};
+        // defer msgBuilder.deinit();
+        // const writer = msgBuilder.writer();
+        // try std.fmt.format(writer, fmt, params);
+        // return msgBuilder.toOwnedSlice();
+        return "";
     }
 
     fn handleTestError(self: *TestContext, comptime fmt: []const u8, params: anytype) !void {
@@ -66,7 +70,7 @@ pub const TestContext = struct {
             try printStackTrace(&err, self.printColor);
         }
 
-        try self.failures.append(err);
+        try self.failures.append(self.alloc, err);
     }
 
     pub fn fail(self: *TestContext) !void {
@@ -336,20 +340,17 @@ fn printLinesFromFileAnyOs(out_stream: anytype, line_info: std.debug.SourceLocat
 // Modified to print out more context from the file and add some
 // extra highlighting.
 fn printStackTrace(failure: *TestFailure, printColor: bool) !void {
+    var stderr_buffer: [4096]u8 = undefined;
+    var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
+    const stderr = &stderr_writer.interface;
+
     // nosuspend {
     if (comptime builtin.target.cpu.arch.isWasm()) {
         if (native_os == .wasi) {
-            const stderr = io.getStdErr().writer();
             stderr.print("Unable to dump stack trace: not implemented for Wasm\n", .{}) catch return;
         }
         return;
     }
-    const stderr = io.getStdErr().writer();
-
-    //     var trace = StringBuilder.init(failure.alloc);
-    //     try trace.ensureTotalCapacity(2048);
-    //     const out_stream = trace.writer();
-    //     defer trace.deinit();
 
     if (builtin.strip_debug_info) {
         stderr.print("Unable to dump stack trace: debug info stripped\n", .{}) catch return;
@@ -395,11 +396,11 @@ fn printStackTrace(failure: *TestFailure, printColor: bool) !void {
     //     failure.stackTrace = try trace.toOwnedSlice();
     // }
 
-    var trace = StringBuilder.init(failure.alloc);
+    var trace: StringBuilder = .{};
     // Preallocate some space for the stack trace.
-    try trace.ensureTotalCapacity(2048);
-    const out_stream = trace.writer();
-    defer trace.deinit();
+    try trace.ensureTotalCapacity(failure.alloc, 2048);
+    const out_stream = trace.writer(failure.alloc);
+    defer trace.deinit(failure.alloc);
     var first = true;
     while (it.next()) |return_address| {
         const module = debug_info.getModuleForAddress(return_address) catch {
@@ -457,7 +458,7 @@ fn printStackTrace(failure: *TestFailure, printColor: bool) !void {
         std.fmt.format(out_stream, "No printable stack frames.", .{}) catch {};
     }
 
-    failure.stackTrace = try trace.toOwnedSlice();
+    failure.stackTrace = try trace.toOwnedSlice(failure.alloc);
 
     // std.debug.writeCurrentStackTrace(stderr, debug_info, std.io.tty.detectConfig(std.io.getStdErr()), null) catch |err| {
     //     stderr.print("Unable to dump stack trace: {s}\n", .{@errorName(err)}) catch return;

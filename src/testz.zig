@@ -65,7 +65,7 @@ pub fn pushTestContext(context: *TestContext, opts: struct { alloc: ?std.mem.All
     }
 
     if(TestContexts == null) {
-        TestContexts = std.ArrayList(*TestContext).init(alloc);
+        TestContexts = .{}; //std.ArrayList(*TestContext).init(alloc);
     }
 
     if(GlobalTestContext == null) {
@@ -73,7 +73,7 @@ pub fn pushTestContext(context: *TestContext, opts: struct { alloc: ?std.mem.All
     }
     else {
         // Push the current Global TestContext onto our stack.
-        try TestContexts.?.append(GlobalTestContext.?);
+        try TestContexts.?.append(alloc, GlobalTestContext.?);
         GlobalTestContext = context;
     }
 }
@@ -200,17 +200,17 @@ pub fn getGroupList(tests: []const TestFuncInfo, opts: InfoOpts) ![]TestGroup
     var groupSeen = std.StringHashMap(bool).init(alloc);
     defer groupSeen.deinit();
 
-    var groupList = std.ArrayList(TestGroup).init(alloc);
-    defer groupList.deinit();
+    var groupList: std.ArrayList(TestGroup) = .{};
+    defer groupList.deinit(alloc);
 
     for(tests) |t| {
         if(!groupSeen.contains(t.group.tag)) {
-            try groupList.append(t.group);
+            try groupList.append(alloc, t.group);
             try groupSeen.put(t.group.tag, true);
         }
     }
 
-    return groupList.toOwnedSlice();
+    return groupList.toOwnedSlice(alloc);
 }
 
 fn pushGivenContext(givenContext: *TestContext, alloc: std.mem.Allocator, opts: RunTestOpts) !void
@@ -283,22 +283,22 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             try filters.put(filt, true);
         }
 
-        var tempList = std.ArrayList(TestFuncInfo).init(alloc);
+        var tempList: std.ArrayList(TestFuncInfo) = .{};
         for(tests) |t| {
             var added: bool = false;
             if(filters.contains(t.group.tag)) {
-                try tempList.append(t);
+                try tempList.append(alloc, t);
                 added = true;
             }
 
             if(!added) {
                 if(filters.contains(t.name)) {
-                    try tempList.append(t);
+                    try tempList.append(alloc, t);
                 }
             }
         }
 
-        testsToRun = try tempList.toOwnedSlice();
+        testsToRun = try tempList.toOwnedSlice(alloc);
     }
     else {
         testsToRun = tests;
@@ -317,7 +317,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         }
 
         var group = groupMap.getPtr(t.group.tag).?;
-        try group.tests.append(t);
+        try group.tests.append(alloc, t);
     }
 
     try writer.print("\n", .{});

@@ -21,11 +21,11 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "testz_main",
-        // In this case the main source file is merely a path, however, in more
-        // complicated build scripts, this could be a generated file.
-        .root_source_file = b.path("tests/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.addModule("main", .{
+            .root_source_file = b.path("tests/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     exe.root_module.addImport("testz", testzMod);
 

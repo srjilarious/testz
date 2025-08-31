@@ -107,40 +107,44 @@ pub const Style = struct {
 };
 
 
-const FilePrinterData = struct {
-    alloc: std.mem.Allocator,
-    file: std.fs.File,
-    colorOutput: bool,
-    bufferWriter: std.io.BufferedWriter(4096, std.fs.File.Writer),
-};
+// const FilePrinterData = struct {
+//     alloc: std.mem.Allocator,
+//     file: std.fs.File,
+//     colorOutput: bool,
+//     bufferWriter: std.io.BufferedWriter(4096, std.fs.File.Writer),
+// };
 
-const ArrayPrinterData = struct {
-    array: std.ArrayList(u8),
-    bufferWriter: std.io.BufferedWriter(4096, std.ArrayList(u8).Writer),
-    alloc: std.mem.Allocator,
-};
+// const ArrayPrinterData = struct {
+//     array: std.ArrayList(u8),
+//     bufferWriter: std.io.BufferedWriter(4096, std.ArrayList(u8).Writer),
+//     alloc: std.mem.Allocator,
+// };
 
 // An adapter for printing either to an ArrayList or to a File like stdout.
 pub const Printer = union(enum) {
-    file: *FilePrinterData,
-    array: *ArrayPrinterData,
+    // file: *FilePrinterData,
+    // array: *ArrayPrinterData,
     _debug: bool,
     
     pub fn stdout(alloc: std.mem.Allocator) !Printer {
-        var f = try alloc.create(FilePrinterData);
-        f.alloc = alloc;
-        f.file = std.io.getStdOut();
-        f.colorOutput = f.file.getOrEnableAnsiEscapeSupport() and f.file.isTty();
-        f.bufferWriter = std.io.bufferedWriter(f.file.writer());
-        return .{.file = f};
+        _ = alloc;
+        // var f = try alloc.create(FilePrinterData);
+        // f.alloc = alloc;
+        // f.file = std.io.getStdOut();
+        // f.colorOutput = f.file.getOrEnableAnsiEscapeSupport() and f.file.isTty();
+        // f.bufferWriter = std.io.bufferedWriter(f.file.writer());
+        // return .{.file = f};
+        return .{ ._debug = true };
     }
 
     pub fn memory(alloc: std.mem.Allocator) !Printer {
-        var a = try alloc.create(ArrayPrinterData);
-        a.alloc = alloc;
-        a.array = std.ArrayList(u8).init(alloc);
-        a.bufferWriter = std.io.bufferedWriter(a.array.writer());
-        return .{.array = a};
+        _ = alloc;
+        // var a = try alloc.create(ArrayPrinterData);
+        // a.alloc = alloc;
+        // a.array = std.ArrayList(u8).init(alloc);
+        // a.bufferWriter = std.io.bufferedWriter(a.array.writer());
+        // return .{.array = a};
+        return .{ ._debug = true };
     }
 
     pub fn debug() Printer {
@@ -148,23 +152,24 @@ pub const Printer = union(enum) {
     }
 
     pub fn deinit(self: *Printer) void {
-        switch(self.*) {
-            .array => |arr| {
-                arr.array.deinit();
-                arr.alloc.destroy(self.array);
-            },
-            .file => |f| {
-                f.alloc.destroy(self.file);
-            },
-            else => {}
-        }
+        _ = self;
+        // switch(self.*) {
+        //     // .array => |arr| {
+        //     //     arr.array.deinit();
+        //     //     arr.alloc.destroy(self.array);
+        //     // },
+        //     // .file => |f| {
+        //     //     f.alloc.destroy(self.file);
+        //     // },
+        //     else => {}
+        // }
     }
 
     pub fn print(self: *const Printer, comptime format: []const u8, args: anytype) anyerror!void
     {
         switch(self.*) {
-            .array => |_| try self.array.bufferWriter.writer().print(format, args),
-            .file => |_| try self.file.bufferWriter.writer().print(format, args),
+            // .array => |_| try self.array.bufferWriter.writer().print(format, args),
+            // .file => |_| try self.file.bufferWriter.writer().print(format, args),
             ._debug => |_| std.debug.print(format, args),
         }
     }
@@ -180,17 +185,17 @@ pub const Printer = union(enum) {
     pub fn flush(self: *const Printer) anyerror!void
     {
         switch(self.*) {
-            .array => |_| try self.array.bufferWriter.flush(),
-            .file => |_| try self.file.bufferWriter.flush(),
+            // .array => |_| try self.array.bufferWriter.flush(),
+            // .file => |_| try self.file.bufferWriter.flush(),
             ._debug => {},
         }
     }
 
     pub fn supportsColor(self: *const Printer) bool {
         switch(self.*) {
-            .file => |f| return f.colorOutput,
-            ._debug => |_| return std.io.getStdErr().supportsAnsiEscapeCodes(),
-            else => { return false; },
+            // .file => |f| return f.colorOutput,
+            ._debug => |_| return true, //std.io.getStdErr().supportsAnsiEscapeCodes(),
+            // else => { return false; },
         }
     }
     
