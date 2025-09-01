@@ -91,6 +91,13 @@ const ArgQueue = struct {
         self.len -= 1;
         return aq.data;
     }
+
+    pub fn isNextItemLikelyAnOption(self: *const Self) bool {
+        // TODO: This might fail for a negative number.
+        if (self.list.first == null) return false;
+        const frontData = self.peekFirst().?;
+        return frontData.len > 0 and frontData[0] == '-';
+    }
 };
 
 pub const Option = struct {
@@ -288,6 +295,7 @@ pub const ArgParser = struct {
     options: OptionList,
 
     groupData: std.StringHashMap(*GroupData),
+
     // Contains all commands, even grouped ones.
     commands: CommandList,
     alloc: std.mem.Allocator,
@@ -355,26 +363,12 @@ pub const ArgParser = struct {
         self.groupData.deinit();
     }
 
-    // pub fn description(self: *ArgParser, desc: []const u8) *ArgParser {
-    //     self.description = desc;
-    //     return self;
-    // }
-    //
-    // pub fn usage(self: *ArgParser, use: []const u8) *ArgParser {
-    //     self.usage = use;
-    //     return self;
-    // }
-    //
-    // pub fn withOptions(self: *ArgParser, opts: []const Option) ParserConfigError!*ArgParser {
-    //     try self.options.addOptions(opts);
-    //     return self;
-    // }
-    //
-    // fn handleOption(parseResult: *ArgParserResult, opt: ?Option) {
-    //
-    // }
-
-    fn parseOption(parseText: *ArgQueue, parseResult: *ArgParserResult, availableOpts: *const OptionList, unsetOptions: *std.ArrayList([]const u8)) !void {
+    fn parseOption(
+        parseText: *ArgQueue,
+        parseResult: *ArgParserResult,
+        availableOpts: *const OptionList,
+        unsetOptions: *std.ArrayList([]const u8),
+    ) !void {
         if (parseText.len == 0) return;
 
         const optFullName = parseText.peekFirst().?;
@@ -468,10 +462,6 @@ pub const ArgParser = struct {
                 optResult.values.append(parseResult.alloc, currVal) catch return;
                 _ = parseText.popFirst();
                 parseResult.currItemPos += 1;
-
-                // paramCounter += 1;
-
-                // std.debug.print("    Option param: {s}\n", .{currVal});
             }
 
             if (opt.?.minNumParams != null and optResult.values.items.len < opt.?.minNumParams.?) {
@@ -482,14 +472,6 @@ pub const ArgParser = struct {
         }
 
         return;
-    }
-
-    fn isNextItemLikelyAnOption(queue: *const ArgQueue) bool {
-        // TODO: Move to part of ArgQueue
-        // TODO: This might fail for a negative number.
-        if (queue.list.first == null) return false;
-        const frontData = queue.peekFirst().?;
-        return frontData.len > 0 and frontData[0] == '-';
     }
 
     pub fn parse(self: *ArgParser) !ArgParserResult {
@@ -512,7 +494,7 @@ pub const ArgParser = struct {
 
     // TODO: Add in returning state for case where we hit `-`
     pub fn parseArgsForOptions(parseResult: *ArgParserResult, availableOpts: *const OptionList, parseText: *ArgQueue, unsetOptions: *std.ArrayList([]const u8)) !void {
-        while (isNextItemLikelyAnOption(parseText)) {
+        while (parseText.isNextItemLikelyAnOption()) {
             // Check if we ran into a number
             const frontData = parseText.peekFirst().?;
             if (frontData.len > 1 and std.ascii.isDigit(frontData[1])) break;
@@ -529,9 +511,6 @@ pub const ArgParser = struct {
 
         for (args) |arg| {
             parseText.append(arg);
-            // const new_node = self.alloc.create(ArgQueueNode) catch unreachable;
-            // new_node.* = ArgQueueNode{ .data = arg };
-            // parseText.append(&new_node.node);
         }
 
         var parseResult = ArgParserResult.init(self.alloc);
@@ -552,8 +531,7 @@ pub const ArgParser = struct {
 
         if (parseText.len > 0) {
             // Setup command list.
-            //const aq: *ArgQueueNode = @fieldParentPtr("node", parseText.first.?);
-            const frontData = parseText.peekFirst().?; //aq.data;
+            const frontData = parseText.peekFirst().?;
 
             // Handle looking for commands after any initial global options.
             for (0..self.commands.data.items.len) |cmdIdx| {
@@ -610,7 +588,6 @@ pub const ArgParser = struct {
 
         // The rest of the arguments are positional.
         while (parseText.len > 0) {
-            // const aq: *ArgQueueNode = @fieldParentPtr("node", parseText.first.?);
             const posData = parseText.peekFirst().?;
             try parseResult.positional.append(parseResult.alloc, posData);
             _ = parseText.popFirst();
