@@ -28,6 +28,6 @@ pub fn runInternal(func: TestFuncInfo, expectedOutput: []const u8, opts: struct 
     });
 
     // Check our test output.
-    _ = expectedOutput;
-    // try testz.expectEqualStr(printer.array.array.items, expectedOutput);
+    const result = printer.array.writer.written();
+    try testz.expectEqualStr(result, expectedOutput);
 }

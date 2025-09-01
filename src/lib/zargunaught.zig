@@ -612,6 +612,7 @@ pub const ArgParser = struct {
     }
 };
 
+/// The result from parsing arguments.
 pub const ArgParserResult = struct {
     alloc: std.mem.Allocator,
     currItemPos: usize,

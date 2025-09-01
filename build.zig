@@ -27,6 +27,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    // exe.use_llvm = true; // Force LLVM backend for debugging.
     exe.root_module.addImport("testz", testzMod);
 
     // This declares intent for the executable to be installed into the

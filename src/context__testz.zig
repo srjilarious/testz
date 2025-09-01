@@ -52,15 +52,10 @@ pub const TestContext = struct {
     }
 
     fn formatOwnedSliceMessage(alloc: std.mem.Allocator, comptime fmt: []const u8, params: anytype) ![]const u8 {
-        _ = alloc;
-        _ = fmt;
-        _ = params;
-        // var msgBuilder: StringBuilder = .{};
-        // defer msgBuilder.deinit();
-        // const writer = msgBuilder.writer();
-        // try std.fmt.format(writer, fmt, params);
-        // return msgBuilder.toOwnedSlice();
-        return "";
+        var msgBuilder: StringBuilder = .{};
+        defer msgBuilder.deinit(alloc);
+        try msgBuilder.writer(alloc).print(fmt, params);
+        return msgBuilder.toOwnedSlice(alloc);
     }
 
     fn handleTestError(self: *TestContext, comptime fmt: []const u8, params: anytype) !void {
@@ -249,18 +244,18 @@ pub const TestContext = struct {
             .error_union => {
                 if (actual) |a| {
                     if (self.printColor) {
-                        try self.handleTestError("Expected error " ++ White ++ "\"{!}\"" ++ Reset ++ ", but got \"{any}\"" ++ Reset, .{ expected, a });
+                        try self.handleTestError("Expected error " ++ White ++ "\"{any}\"" ++ Reset ++ ", but got \"{any}\"" ++ Reset, .{ expected, a });
                     } else {
-                        try self.handleTestError("Expected error \"{!}\", but got \"{any}\"", .{ expected, a });
+                        try self.handleTestError("Expected error \"{any}\", but got \"{any}\"", .{ expected, a });
                     }
 
                     return error.TestExpectedError;
                 } else |e| {
                     if (e != expected) {
                         if (self.printColor) {
-                            try self.handleTestError("Expected " ++ White ++ "\"{!}\"" ++ Reset ++ ", but got \"{!}\"" ++ Reset, .{ actual, e });
+                            try self.handleTestError("Expected " ++ White ++ "\"{any}\"" ++ Reset ++ ", but got \"{any}\"" ++ Reset, .{ actual, e });
                         } else {
-                            try self.handleTestError("Expected \"{!}\", but got \"{!}\"", .{ actual, e });
+                            try self.handleTestError("Expected \"{any}\", but got \"{any}\"", .{ actual, e });
                         }
 
                         return error.TestExpectedError;

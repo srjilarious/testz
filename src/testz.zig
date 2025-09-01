@@ -568,11 +568,12 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
 
     const optPrintColor: ?bool = args.hasOption("color");
 
+    var printer = try Printer.stdout(std.heap.page_allocator);
+    defer printer.deinit();
+
     // Prints out the help text and exits
     if(args.hasOption("help")) {
         // using duped Printer struct comes from using vendored zargunaught lib
-        var printer = try Printer.stdout(std.heap.page_allocator);
-        defer printer.deinit();
 
         var help = try zargs.help.HelpFormatter.init(&parser, printer, zargs.help.DefaultTheme, std.heap.page_allocator);
         help.printHelpText() catch |err| {
@@ -582,9 +583,6 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
     }
     // List out the available group tags and names.
     else if(args.hasOption("groups")) {
-        var printer = try Printer.stdout(std.heap.page_allocator);
-        defer printer.deinit();
-
         const groups = try getGroupList(testsToRun, .{});
 
         if(groups.len > 0) {
