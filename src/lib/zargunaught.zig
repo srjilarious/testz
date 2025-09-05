@@ -19,6 +19,7 @@ pub const ParseError = error{
     TooFewOptionParams,
     TooFewPositionalArguments,
     TooManyPositionalArguments,
+    StackedOptionCantTakeParams,
 };
 
 // Used to provide a list of parameters to an option when it takes
@@ -117,7 +118,6 @@ pub const OptionResult = struct {
     numOccurences: u8,
 
     pub fn init(name: []const u8) OptionResult {
-        // TODO: fix allocator.
         return .{
             .name = name,
             .values = .{},
@@ -192,6 +192,8 @@ pub const OptionList = struct {
 
     pub fn findShortOption(self: *const OptionList, optName: []const u8) OptionFindResult {
         for (self.data.items) |opt| {
+            if (opt.shortName.len == 0) continue;
+
             // Allow short option names to stack.
             if (std.mem.startsWith(u8, optName, opt.shortName)) {
                 return .{ .opt = opt, .remaining = optName[opt.shortName.len..] };
@@ -383,6 +385,7 @@ pub const ArgParser = struct {
 
         var optName: []const u8 = undefined;
         var opt: ?Option = null;
+        var stacked = false;
 
         if (optFullName[0] == '-' and optFullName[1] == '-') {
             optName = optFullName[2..];
@@ -406,35 +409,53 @@ pub const ArgParser = struct {
         // Handle single (or stacked) short option(s)
         else if (optFullName[0] == '-') {
             optName = optFullName[1..];
-            while (optName.len > 0) {
-                const optFindResult = availableOpts.findShortOption(optName);
-                opt = optFindResult.opt;
-                if (optFindResult.opt == null) break;
+            stacked = optName.len > 1;
+            if (stacked) {
+                while (optName.len > 0) {
+                    const optFindResult = availableOpts.findShortOption(optName);
+                    opt = optFindResult.opt;
+                    if (optFindResult.opt == null) break;
 
-                const existing = parseResult.option(opt.?.longName);
-                var optResult = blk: {
-                    if (existing) |existingOptResult| {
-                        break :blk existingOptResult;
-                    } else {
-                        const ores = OptionResult.init(opt.?.longName);
-                        try parseResult.options.append(parseResult.alloc, ores);
-                        break :blk parseResult.option(opt.?.longName).?;
+                    optName = optFindResult.remaining;
+
+                    const existing = parseResult.option(opt.?.longName);
+                    var optResult = blk: {
+                        if (existing) |existingOptResult| {
+                            break :blk existingOptResult;
+                        } else {
+                            const ores = OptionResult.init(opt.?.longName);
+                            try parseResult.options.append(parseResult.alloc, ores);
+                            break :blk parseResult.option(opt.?.longName).?;
+                        }
+                    };
+
+                    // If this option takes parameters, we can't be stacked.
+                    if (opt.?.minNumParams != null and opt.?.minNumParams.? > 0 and stacked) {
+                        return ParseError.StackedOptionCantTakeParams;
                     }
-                };
-                optResult.numOccurences += 1;
-                if (opt.?.maxOccurences != null) {
-                    if (optResult.numOccurences > opt.?.maxOccurences.?) {
-                        return error.TooManyOptionOccurences;
+
+                    optResult.numOccurences += 1;
+
+                    if (opt.?.maxOccurences != null) {
+                        if (optResult.numOccurences > opt.?.maxOccurences.?) {
+                            return error.TooManyOptionOccurences;
+                        }
                     }
                 }
 
-                optName = optFindResult.remaining;
+                _ = parseText.popFirst();
+                parseResult.currItemPos += 1;
+                return;
+            } else {
+                const optFindResult = availableOpts.findShortOption(optName);
+                opt = optFindResult.opt;
             }
         }
 
         _ = parseText.popFirst();
         parseResult.currItemPos += 1;
 
+        // Short options alone can take parameters, but not stacked ones.
         if (opt != null) {
             const existing = parseResult.option(opt.?.longName);
             var optResult = blk: {
@@ -446,6 +467,13 @@ pub const ArgParser = struct {
                     break :blk parseResult.option(opt.?.longName).?;
                 }
             };
+
+            optResult.numOccurences += 1;
+            if (opt.?.maxOccurences != null) {
+                if (optResult.numOccurences > opt.?.maxOccurences.?) {
+                    return error.TooManyOptionOccurences;
+                }
+            }
 
             var paramCounter: usize = 0;
             while (parseText.len > 0 and
