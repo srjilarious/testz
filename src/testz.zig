@@ -221,6 +221,11 @@ fn pushGivenContext(givenContext: *TestContext, alloc: std.mem.Allocator, opts: 
     try pushTestContext(givenContext, .{ .alloc = alloc });
 }
 
+// Checks if a test name is marked as skip.
+fn startsWithSkip(name: []const u8) bool {
+    return name.len >= 5 and std.mem.eql(u8, name[0..5], "skip_");
+}
+
 /// Takes a slice of TestFuncInfo and runs them using the given options
 /// to handle filtering and how to display the results.
 pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
@@ -370,11 +375,12 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
 
             testsRun += 1;
 
-            const testPrintName = if(f.skip) f.name[5..] else f.name;
+            const skip = startsWithSkip(f.name);
+            const testPrintName = if(skip) f.name[5..] else f.name;
 
             GlobalTestContext.?.setCurrentTest(testPrintName);
             if (opts.verbose) {
-                if(f.skip) {
+                if(skip) {
                     try writer.print("\nSkipping ", .{});
                     if(printColor) try writer.print(DarkGray, .{});
                     try writer.print("{s}", .{testPrintName});
@@ -393,7 +399,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             }
 
             // If we are skipping this test, print a jump over arrow.
-            if(f.skip) {
+            if(skip) {
                 if(printColor) try writer.print(Yellow, .{});
                 try writer.print("\u{21b7}", .{});
                 if(printColor) try writer.print(Reset, .{});

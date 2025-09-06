@@ -2,8 +2,8 @@
 ![Testz Logo](images/testz.png)
 
 
-![Version Badge](https://img.shields.io/badge/Version-0.6.2-brightgreen)
-![Zig Version Badge](https://img.shields.io/badge/Zig%20Version-0.14.0-%23f7a41d?logo=zig)
+![Version Badge](https://img.shields.io/badge/Version-1.0.0-brightgreen)
+![Zig Version Badge](https://img.shields.io/badge/Zig%20Version-0.15.1-%23f7a41d?logo=zig)
 ![License Badge](https://img.shields.io/badge/License-MIT-blue)
 
 # Overview
@@ -109,7 +109,4 @@ See the project under `example/` for how this looks in a simple dummy project.
 # Planned Features
 
 The library has all of the initial features I set out to implement.  Feel free to open an issue or open a PR if there is a feature you'd like to see!
-
-### Roadmap / Ideas
-- [ ] Capture number of assertions in each test
 

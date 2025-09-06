@@ -18,6 +18,16 @@ pub const DiscoverOpts = struct {
     debugDiscovery: bool = false,
 };
 
+// Replace std.mem.endsWith(u8, decl.name, "Test") with:
+inline fn endsWithTest(comptime name: []const u8) bool {
+    return name.len >= 4 and std.mem.eql(u8, name[name.len - 4 ..], "Test");
+}
+
+// Replace std.mem.startsWith(u8, decl.name, "skip_") with:
+inline fn startsWithSkip(comptime name: []const u8) bool {
+    return name.len >= 5 and std.mem.eql(u8, name[0..5], "skip_");
+}
+
 pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type, opts: DiscoverOpts) []const TestFuncInfo {
     comptime var numTests: usize = 0;
     const decls = @typeInfo(mod).@"struct".decls;
@@ -43,29 +53,37 @@ pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type, 
                 @compileLog("Evaluating function:", decl.name);
             }
 
-            var isTest: bool = true;
-            if (opts.testsEndWithTest and !std.mem.endsWith(u8, decl.name, "Test")) {
-                if (opts.debugDiscovery) {
-                    @compileLog("Not running {} as a test since its name doesn't end with `Test`", .{decl.name});
-                }
+            tests[idx] = .{
+                .func = fld,
+                .name = decl.name,
+                .skip = false,
+                .group = groupInfo,
+            };
+            idx += 1;
 
-                isTest = false;
-            }
+            // var isTest: bool = true;
+            // if (opts.testsEndWithTest and !endsWithTest(decl.name)) {
+            //     if (opts.debugDiscovery) {
+            //         @compileLog("Not running {} as a test since its name doesn't end with `Test`", .{decl.name});
+            //     }
 
-            if (isTest) {
-                const skip = std.mem.startsWith(u8, decl.name, "skip_");
-                if (skip and opts.debugDiscovery) {
-                    @compileLog("Function {} will be skipped since it starts with `_skip`", .{decl.name});
-                }
+            //     isTest = false;
+            // }
 
-                tests[idx] = .{
-                    .func = fld,
-                    .name = decl.name,
-                    .skip = skip,
-                    .group = groupInfo,
-                };
-                idx += 1;
-            }
+            // if (isTest) {
+            //     const skip = startsWithSkip(decl.name);
+            //     if (skip and opts.debugDiscovery) {
+            //         @compileLog("Function {} will be skipped since it starts with `_skip`", .{decl.name});
+            //     }
+
+            //     tests[idx] = .{
+            //         .func = fld,
+            //         .name = decl.name,
+            //         .skip = skip,
+            //         .group = groupInfo,
+            //     };
+            //     idx += 1;
+            // }
         }
     }
 
@@ -89,7 +107,7 @@ pub fn discoverTests(comptime mods: anytype, opts: DiscoverOpts) []const TestFun
     const MaxTests = 10000;
     comptime var tests: [MaxTests]TestFuncInfo = undefined;
     comptime var totalTests: usize = 0;
-    comptime var fieldIdx = 0;
+    // comptime var fieldIdx = 0;
     comptime var currGroup: TestGroup = undefined;
     const ModsType = @TypeOf(mods);
     const modsTypeInfo = @typeInfo(ModsType);
@@ -97,11 +115,10 @@ pub fn discoverTests(comptime mods: anytype, opts: DiscoverOpts) []const TestFun
         @compileError("expected tuple or struct argument of modules, found " ++ @typeName(ModsType));
     }
 
-    const fieldsInfo = modsTypeInfo.@"struct".fields;
-    inline for (fieldsInfo) |_| {
-        const fieldName = std.fmt.comptimePrint("{}", .{fieldIdx});
-        const currIndexItem = @field(mods, fieldName);
-        fieldIdx += 1;
+    const fields = modsTypeInfo.@"struct".fields;
+    inline for (fields, 0..) |field, i| {
+        _ = i; // You can use i if needed for debugging
+        const currIndexItem = @field(mods, field.name);
 
         if (@TypeOf(currIndexItem) == Group) {
             currGroup = .{
@@ -139,7 +156,7 @@ pub fn discoverTests(comptime mods: anytype, opts: DiscoverOpts) []const TestFun
             };
 
             // We expect a normal struct/module import result in this case.
-            totalTests = addModuleTests(&tests, @field(mods, fieldName), currGroup, opts, totalTests);
+            totalTests = addModuleTests(&tests, @field(mods, field.name), currGroup, opts, totalTests);
         }
     }
 
