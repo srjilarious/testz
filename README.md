@@ -108,5 +108,7 @@ See the project under `example/` for how this looks in a simple dummy project.
 
 # Planned Features
 
-The library has all of the initial features I set out to implement.  Feel free to open an issue or open a PR if there is a feature you'd like to see!
+The library has all of the initial features I set out to implement.  New releases will mostly be to keep up to date with the latest zig versions as they get released.
+
+Feel free to open an issue or open a PR if there is a feature you'd like to see!
 

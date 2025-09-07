@@ -358,7 +358,7 @@ fn printStackTrace(failure: *TestFailure, printColor: bool) !void {
 
     if (native_os == .windows) {
         var context: std.debug.ThreadContext = undefined;
-        const tty_config = io.tty.detectConfig(std.io.getStdErr());
+        const tty_config = io.tty.detectConfig(std.fs.File.stderr());
         std.debug.assert(std.debug.getContext(&context));
         return std.debug.writeStackTraceWindows(stderr, debug_info, tty_config, &context, null);
     }

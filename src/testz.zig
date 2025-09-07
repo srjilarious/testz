@@ -1,5 +1,5 @@
-// zig fmt: off
 const std = @import("std");
+const builtin = @import("builtin");
 
 const print = @import("./lib/printer.zig");
 pub const Printer = print.Printer;
@@ -49,29 +49,24 @@ pub const InfoOpts = struct {
     writer: ?Printer = null,
 };
 
-
-
 var GlobalTestContext: ?*TestContext = null;
 var TestContexts: ?std.ArrayList(*TestContext) = null;
 
-pub fn pushTestContext(context: *TestContext, opts: struct { alloc: ?std.mem.Allocator=null }) !void {
-
+pub fn pushTestContext(context: *TestContext, opts: struct { alloc: ?std.mem.Allocator = null }) !void {
     var alloc: std.mem.Allocator = undefined;
-    if(opts.alloc != null) {
+    if (opts.alloc != null) {
         alloc = opts.alloc.?;
-    }
-    else {
+    } else {
         alloc = std.heap.page_allocator;
     }
 
-    if(TestContexts == null) {
+    if (TestContexts == null) {
         TestContexts = .{}; //std.ArrayList(*TestContext).init(alloc);
     }
 
-    if(GlobalTestContext == null) {
+    if (GlobalTestContext == null) {
         GlobalTestContext = context;
-    }
-    else {
+    } else {
         // Push the current Global TestContext onto our stack.
         try TestContexts.?.append(alloc, GlobalTestContext.?);
         GlobalTestContext = context;
@@ -79,10 +74,9 @@ pub fn pushTestContext(context: *TestContext, opts: struct { alloc: ?std.mem.All
 }
 
 pub fn popTestContext() void {
-    if(TestContexts != null and TestContexts.?.items.len > 0) {
-       GlobalTestContext = TestContexts.?.pop();
-    }
-    else {
+    if (TestContexts != null and TestContexts.?.items.len > 0) {
+        GlobalTestContext = TestContexts.?.pop();
+    } else {
         GlobalTestContext = null;
     }
 }
@@ -136,29 +130,29 @@ fn printChars(writer: *Printer, ch: []const u8, num: usize) !void {
 }
 
 fn printTestTime(
-        writer: *Printer, 
-        timeNs: u64, 
-        opts: struct { 
-            printColor: bool,
-            dummyTiming: bool = false,
-        },
-    ) !void {
+    writer: *Printer,
+    timeNs: u64,
+    opts: struct {
+        printColor: bool,
+        dummyTiming: bool = false,
+    },
+) !void {
     try writer.print(" (", .{});
-    if(opts.printColor) try writer.print(White, .{});
+    if (opts.printColor) try writer.print(White, .{});
 
     const timeNsFloat: f64 = @floatFromInt(timeNs);
 
     // Used for internal testing.
-    if(opts.dummyTiming) {
+    if (opts.dummyTiming) {
         try writer.print(" XX.XX ms", .{});
     }
     // Seconds
-    else if(timeNs > 1000_000_000) {
-        try writer.print("{d: >6.2} secs", .{timeNsFloat / 1000_000_000.0}); 
+    else if (timeNs > 1000_000_000) {
+        try writer.print("{d: >6.2} secs", .{timeNsFloat / 1000_000_000.0});
     }
     // milliseconds
-    else if(timeNs > 1000_000) {
-        try writer.print("{d: >6.2} ms", .{timeNsFloat / 1000_000.0}); 
+    else if (timeNs > 1000_000) {
+        try writer.print("{d: >6.2} ms", .{timeNsFloat / 1000_000.0});
     }
     // microseconds
     else if (timeNs > 1000) {
@@ -169,31 +163,29 @@ fn printTestTime(
         try writer.print("{d: >6} ns", .{timeNs});
     }
 
-    if(opts.printColor) try writer.print(Reset, .{});
+    if (opts.printColor) try writer.print(Reset, .{});
     try writer.print(")", .{});
 }
 
 fn printGroupSeparatorLine(writer: *Printer, maxTestNameLength: usize, printColor: bool) !void {
-     // Print top line of group banner, 21 is the num of chars in a verbose test print
+    // Print top line of group banner, 21 is the num of chars in a verbose test print
     // regardless of name length.
-    if(printColor) try writer.print(DarkGreen, .{});
+    if (printColor) try writer.print(DarkGreen, .{});
 
     try writer.print("# ", .{});
     try printChars(writer, "-", maxTestNameLength + 24 - 2);
 
-    if(printColor) try writer.print(Reset, .{});
-    // 
+    if (printColor) try writer.print(Reset, .{});
+    //
 }
 
 /// Looks at the slice of tests and returns an owned slice of TestGroups
 /// which can be used to list the available filter tags, for example.
-pub fn getGroupList(tests: []const TestFuncInfo, opts: InfoOpts) ![]TestGroup
-{
+pub fn getGroupList(tests: []const TestFuncInfo, opts: InfoOpts) ![]TestGroup {
     var alloc: std.mem.Allocator = undefined;
-    if(opts.alloc != null) {
+    if (opts.alloc != null) {
         alloc = opts.alloc.?;
-    }
-    else {
+    } else {
         alloc = std.heap.page_allocator;
     }
 
@@ -203,8 +195,8 @@ pub fn getGroupList(tests: []const TestFuncInfo, opts: InfoOpts) ![]TestGroup
     var groupList: std.ArrayList(TestGroup) = .{};
     defer groupList.deinit(alloc);
 
-    for(tests) |t| {
-        if(!groupSeen.contains(t.group.tag)) {
+    for (tests) |t| {
+        if (!groupSeen.contains(t.group.tag)) {
             try groupList.append(alloc, t.group);
             try groupSeen.put(t.group.tag, true);
         }
@@ -213,8 +205,7 @@ pub fn getGroupList(tests: []const TestFuncInfo, opts: InfoOpts) ![]TestGroup
     return groupList.toOwnedSlice(alloc);
 }
 
-fn pushGivenContext(givenContext: *TestContext, alloc: std.mem.Allocator, opts: RunTestOpts) !void
-{
+fn pushGivenContext(givenContext: *TestContext, alloc: std.mem.Allocator, opts: RunTestOpts) !void {
     givenContext.verbose = opts.verbose;
     givenContext.printStackTraceOnFail = opts.printStackTraceOnFail;
     // givenContext.printColor = opts.printColor;
@@ -230,82 +221,77 @@ fn startsWithSkip(name: []const u8) bool {
 /// to handle filtering and how to display the results.
 pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
     var alloc: std.mem.Allocator = undefined;
-    if(opts.alloc != null) {
+    if (opts.alloc != null) {
         alloc = opts.alloc.?;
-    }
-    else {
+    } else {
         alloc = std.heap.page_allocator;
     }
 
-    // Handle a potential passed in test context to use and 
+    // Handle a potential passed in test context to use and
     // create a global context if one doesn't exist already.
     var createdOwnContext: bool = false;
-    if(GlobalTestContext == null) {
-        if(opts.testContext != null) {
+    if (GlobalTestContext == null) {
+        if (opts.testContext != null) {
             try pushGivenContext(opts.testContext.?, alloc, opts);
-        }
-        else {
+        } else {
             // Create a global context by pushing one, we'll clean this up at
             // the end of runTests.
             const newContext = try alloc.create(TestContext);
 
-            newContext.* = TestContext.init(alloc, .{ 
-                .verbose = opts.verbose, 
-                .printStackTraceOnFail = opts.printStackTraceOnFail, 
+            newContext.* = TestContext.init(alloc, .{
+                .verbose = opts.verbose,
+                .printStackTraceOnFail = opts.printStackTraceOnFail,
             });
             try pushTestContext(newContext, .{ .alloc = alloc });
             createdOwnContext = true;
         }
-    }
-    else {
-        if(opts.testContext != null) {
+    } else {
+        if (opts.testContext != null) {
             try pushGivenContext(opts.testContext.?, alloc, opts);
         }
     }
 
     var writer: Printer = undefined;
     var usingDefaultWriter: bool = false;
-    if(opts.writer != null) {
+    if (opts.writer != null) {
         writer = opts.writer.?;
-    }
-    else {
+    } else {
         writer = try Printer.stdout(alloc);
         usingDefaultWriter = true;
     }
 
     var printColor: bool = writer.supportsColor();
-    if(opts.printColor != null) {
+    if (opts.printColor != null) {
         printColor = printColor and opts.printColor.?;
     }
     GlobalTestContext.?.printColor = printColor;
 
     // Filter on the list of tests based on provided tag filters.
     var testsToRun: []const TestFuncInfo = undefined;
-    if(opts.allowFilters != null) {
+    if (opts.allowFilters != null) {
         var filters = std.StringHashMap(bool).init(alloc);
         defer filters.deinit();
-        for(opts.allowFilters.?) |filt| {
+        for (opts.allowFilters.?) |filt| {
             try filters.put(filt, true);
         }
 
         var tempList: std.ArrayList(TestFuncInfo) = .{};
-        for(tests) |t| {
+        for (tests) |t| {
             var added: bool = false;
-            if(filters.contains(t.group.tag)) {
+            if (filters.contains(t.group.tag)) {
                 try tempList.append(alloc, t);
                 added = true;
             }
 
-            if(!added) {
-                if(filters.contains(t.name)) {
+            if (!added) {
+                if (filters.contains(t.name)) {
                     try tempList.append(alloc, t);
                 }
             }
         }
 
         testsToRun = try tempList.toOwnedSlice(alloc);
-    }
-    else {
+    } else {
         testsToRun = tests;
     }
 
@@ -314,11 +300,10 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
     var groupMap = TestFuncMap.init(alloc);
     defer groupMap.deinit();
 
-    for(testsToRun) |t| {
-        if(!groupMap.contains(t.group.tag)) {
+    for (testsToRun) |t| {
+        if (!groupMap.contains(t.group.tag)) {
             const group = TestFuncGroup.init(t.group.name.?, alloc);
             try groupMap.put(t.group.tag, group);
-
         }
 
         var group = groupMap.getPtr(t.group.tag).?;
@@ -336,18 +321,18 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
     // Find the longest length name in the tests for formatting.
     var verboseLength: usize = 0;
     // if (opts.verbose) {
-        for (testsToRun) |f| {
-            if (f.name.len > verboseLength) {
-                verboseLength = f.name.len;
-            }
+    for (testsToRun) |f| {
+        if (f.name.len > verboseLength) {
+            verboseLength = f.name.len;
         }
+    }
     // }
 
     // Iterate over each group of tests.
     var groupIterator = groupMap.keyIterator();
-    while(true) {
+    while (true) {
         const groupTag = groupIterator.next();
-        if(groupTag == null) break;
+        if (groupTag == null) break;
 
         var group = groupMap.get(groupTag.?.*).?;
 
@@ -355,14 +340,14 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         defer group.deinit();
 
         // Print out the name of the current group unless it's the default one.
-        if(opts.verbose and group.name.len > 0 and !std.mem.eql(u8, groupTag.?.*, "default")) {
+        if (opts.verbose and group.name.len > 0 and !std.mem.eql(u8, groupTag.?.*, "default")) {
             try printGroupSeparatorLine(&writer, verboseLength, printColor);
-           
+
             try writer.print("\n", .{});
-            if(printColor) try writer.print(DarkGreen, .{});
+            if (printColor) try writer.print(DarkGreen, .{});
             try writer.print("# ", .{});
 
-            if(printColor) try writer.print(Green, .{});
+            if (printColor) try writer.print(Green, .{});
             try writer.print("{s}\n", .{group.name});
 
             try printGroupSeparatorLine(&writer, verboseLength, printColor);
@@ -370,39 +355,38 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
         }
 
         // Run each of the tests for the group.
-        for(group.tests.items) |f| {
+        for (group.tests.items) |f| {
             const testStartTime = try std.time.Instant.now();
 
             testsRun += 1;
 
             const skip = startsWithSkip(f.name);
-            const testPrintName = if(skip) f.name[5..] else f.name;
+            const testPrintName = if (skip) f.name[5..] else f.name;
 
             GlobalTestContext.?.setCurrentTest(testPrintName);
             if (opts.verbose) {
-                if(skip) {
+                if (skip) {
                     try writer.print("\nSkipping ", .{});
-                    if(printColor) try writer.print(DarkGray, .{});
+                    if (printColor) try writer.print(DarkGray, .{});
                     try writer.print("{s}", .{testPrintName});
-                    if(printColor) try writer.print(Reset, .{});
-                    try writer.print("..",  .{});
-                }
-                else {
+                    if (printColor) try writer.print(Reset, .{});
+                    try writer.print("..", .{});
+                } else {
                     try writer.print("\nRunning ", .{});
-                    if(printColor) try writer.print(White, .{});
+                    if (printColor) try writer.print(White, .{});
                     try writer.print("{s}", .{testPrintName});
-                    if(printColor) try writer.print(Reset, .{});
-                    try writer.print("...",  .{});
+                    if (printColor) try writer.print(Reset, .{});
+                    try writer.print("...", .{});
                 }
                 const num = @min(verboseLength - testPrintName.len, 128);
                 try printChars(&writer, ".", num);
             }
 
             // If we are skipping this test, print a jump over arrow.
-            if(skip) {
-                if(printColor) try writer.print(Yellow, .{});
+            if (skip) {
+                if (printColor) try writer.print(Yellow, .{});
                 try writer.print("\u{21b7}", .{});
-                if(printColor) try writer.print(Reset, .{});
+                if (printColor) try writer.print(Reset, .{});
                 testsSkipped += 1;
                 continue;
             }
@@ -411,35 +395,35 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             f.func() catch {
 
                 // Print an `X` on test failure.
-                if(printColor) try writer.print(Red, .{});
+                if (printColor) try writer.print(Red, .{});
                 try writer.print("X", .{});
-                if(printColor) try writer.print(Reset, .{});
+                if (printColor) try writer.print(Reset, .{});
                 errorCaught = true;
                 testsFailed += 1;
             };
 
             // If we passed, print a dot in non-verbose mode and a check-mark in verbose.
-            if(!errorCaught) {
+            if (!errorCaught) {
                 testsPassed += 1;
 
-                if(printColor) try writer.print(Green , .{});
+                if (printColor) try writer.print(Green, .{});
 
                 if (opts.verbose) {
                     try writer.print("\u{2713}", .{});
                 } else {
                     try writer.print("\u{22c5}", .{});
                 }
-                
-                if(printColor) try writer.print(Reset, .{});
+
+                if (printColor) try writer.print(Reset, .{});
             }
 
             const testEndTime = try std.time.Instant.now();
             const testAmountNs = testEndTime.since(testStartTime);
 
-            if(opts.verbose) {
-                try printTestTime(&writer, testAmountNs, .{ 
-                    .printColor=printColor, 
-                    .dummyTiming=opts.dummyTiming,
+            if (opts.verbose) {
+                try printTestTime(&writer, testAmountNs, .{
+                    .printColor = printColor,
+                    .dummyTiming = opts.dummyTiming,
                 });
             }
 
@@ -447,123 +431,88 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             try writer.flush();
         }
 
-        if(opts.verbose and group.name.len > 0) {
+        if (opts.verbose and group.name.len > 0) {
             try writer.print("\n\n", .{});
         }
     }
 
-    for(GlobalTestContext.?.failures.items) |failure| {
-        if(printColor) {
+    for (GlobalTestContext.?.failures.items) |failure| {
+        if (printColor) {
             try writer.print("\n" ++ Red ++ "FAIL " ++ Yellow ++ "{s}" ++ Reset, .{failure.testName});
-        }
-        else {
+        } else {
             try writer.print("\nFAIL {s}", .{failure.testName});
         }
         try writer.print(": {?s}", .{failure.errorMessage});
-        if(opts.printStackTraceOnFail) {
-            if(failure.stackTrace != null) {
+        if (opts.printStackTraceOnFail) {
+            if (failure.stackTrace != null) {
                 try writer.print("{?s}\n", .{failure.stackTrace});
-            }
-            else {
+            } else {
                 try writer.print("\nNo stack trace available.\n", .{});
             }
         }
     }
 
-    if(printColor) {
+    if (printColor) {
         try writer.print("\n\n" ++ White ++ "{} " ++ Green ++ "Passed" ++ Reset ++ ", " ++
             White ++ "{} " ++ Red ++ "Failed" ++ Reset ++ ", " ++
             White ++ "{} " ++ Yellow ++ "Skipped" ++ Reset ++ ", " ++
-            White ++ "{} " ++ Cyan ++ "Total Tests" ++ Reset, //"({})"\n\n", 
-        .{ 
-            testsPassed, 
-            testsFailed, 
-            testsSkipped,
-            testsRun 
-        });
-    }
-    else {
-        try writer.print("\n\n{} Passed, {} Failed, {} Skipped, {} Total Tests", 
-        .{ 
-            testsPassed, 
-            testsFailed, 
-            testsSkipped,
-            testsRun 
-        });
+            White ++ "{} " ++ Cyan ++ "Total Tests" ++ Reset, //"({})"\n\n",
+            .{ testsPassed, testsFailed, testsSkipped, testsRun });
+    } else {
+        try writer.print("\n\n{} Passed, {} Failed, {} Skipped, {} Total Tests", .{ testsPassed, testsFailed, testsSkipped, testsRun });
     }
 
-    try printTestTime(&writer, totalTestTimeNs, .{ 
-        .printColor = printColor, 
+    try printTestTime(&writer, totalTestTimeNs, .{
+        .printColor = printColor,
         .dummyTiming = opts.dummyTiming,
     });
     try writer.print("\n", .{});
     try writer.flush();
 
     // Clean up the slice we created if we had filters.
-    if(opts.allowFilters != null) {
+    if (opts.allowFilters != null) {
         alloc.free(testsToRun);
     }
 
-    if(usingDefaultWriter) {
+    if (usingDefaultWriter) {
         writer.deinit();
     }
 
-    if(createdOwnContext) {
+    if (createdOwnContext) {
         const gtcAlloc = GlobalTestContext.?.alloc;
         GlobalTestContext.?.deinit();
         gtcAlloc.destroy(GlobalTestContext.?);
         popTestContext();
     }
 
-    if(opts.testContext != null) {
+    if (opts.testContext != null) {
         popTestContext();
     }
 
     return testsFailed == 0;
 }
 
-
-
-
 // Vendored argument parsing lib.
 const zargs = @import("lib/zargunaught.zig");
 const Option = zargs.Option;
 
+const GroupTitleStyle: Style = .{ .fg = Color.BrightGreen, .bg = Color.Reset, .mod = .{ .underline = true, .bold = true } };
 
-const GroupTitleStyle: Style = .{
-    .fg = Color.BrightGreen,
-    .bg = Color.Reset,
-    .mod = .{ .underline = true, .bold = true }
-};
+const GroupNameStyle: Style = .{ .fg = Color.BrightWhite, .bg = Color.Reset, .mod = .{ .bold = true } };
 
-const GroupNameStyle: Style = .{
-    .fg = Color.BrightWhite,
-    .bg = Color.Reset,
-    .mod = .{ .bold = true }
-};
-
-const GroupTagStyle: Style = .{
-    .fg = Color.BrightYellow,
-    .bg = Color.Reset,
-    .mod = .{}
-};
+const GroupTagStyle: Style = .{ .fg = Color.BrightYellow, .bg = Color.Reset, .mod = .{} };
 
 /// A default test runner implementation that parses the command line for options and runs the passed in tests.
 /// It allows for verbose/non-verbose output, disabling printing stack traces and providing a list of
 /// filter tags to only run some tests.
 pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
-    var parser = try zargs.ArgParser.init(
-        std.heap.page_allocator, .{ 
-            .name = "Unit tests", 
-            .description = "Unit tests....", 
-            .opts = &[_]Option{
-                Option{ .longName = "verbose", .shortName = "v", .description = "Verbose output", .maxNumParams = 0 },
-                Option{ .longName = "stack_trace", .shortName = "s", .description = "Print stack traces on errors", .maxNumParams = 0, .default = zargs.DefaultValue.set() },
-                Option{ .longName = "groups", .shortName = "g", .description = "Lists the groups of tests", .maxNumParams = 0 },
-                Option{ .longName = "color", .description = "Forces color output", .maxNumParams = 0, .default = zargs.DefaultValue.set() },
-                Option{ .longName = "help", .shortName = "h", .description = "Prints out the help text." },
-            } 
-        });
+    var parser = try zargs.ArgParser.init(std.heap.page_allocator, .{ .name = "Unit tests", .description = "Unit tests....", .opts = &[_]Option{
+        Option{ .longName = "verbose", .shortName = "v", .description = "Verbose output", .maxNumParams = 0 },
+        Option{ .longName = "stack_trace", .shortName = "s", .description = "Print stack traces on errors", .maxNumParams = 0, .default = zargs.DefaultValue.set() },
+        Option{ .longName = "groups", .shortName = "g", .description = "Lists the groups of tests", .maxNumParams = 0 },
+        Option{ .longName = "color", .description = "Forces color output", .maxNumParams = 0, .default = zargs.DefaultValue.set() },
+        Option{ .longName = "help", .shortName = "h", .description = "Prints out the help text." },
+    } });
     defer parser.deinit();
 
     var args = parser.parse() catch |err| {
@@ -574,47 +523,58 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
 
     const optPrintColor: ?bool = args.hasOption("color");
 
+    const orig_windows_cp = if (builtin.os.tag == .windows) std.os.windows.kernel32.GetConsoleOutputCP() else 0;
+    defer {
+        if (builtin.os.tag == .windows) _ = std.os.windows.kernel32.SetConsoleOutputCP(orig_windows_cp);
+    }
+
+    // Set the code page to UTF-8 on Windows so we can print unicode characters.  The code
+    // above restores the original code page on exit.
+    if (builtin.os.tag == .windows) {
+        const kernel32 = std.os.windows.kernel32;
+        _ = kernel32.SetConsoleOutputCP(65001); // UTF-8 code page
+    }
+
     var printer = try Printer.stdout(std.heap.page_allocator);
     defer printer.deinit();
 
     // Prints out the help text and exits
-    if(args.hasOption("help")) {
+    if (args.hasOption("help")) {
         // using duped Printer struct comes from using vendored zargunaught lib
 
         var help = try zargs.help.HelpFormatter.init(&parser, printer, zargs.help.DefaultTheme, std.heap.page_allocator);
         help.printHelpText() catch |err| {
             std.debug.print("Err: {any}\n", .{err});
-        }; 
+        };
         try printer.flush();
     }
     // List out the available group tags and names.
-    else if(args.hasOption("groups")) {
+    else if (args.hasOption("groups")) {
         const groups = try getGroupList(testsToRun, .{});
 
-        if(groups.len > 0) {
-            if(!args.hasOption("color")) {
+        if (groups.len > 0) {
+            if (!args.hasOption("color")) {
                 try printer.print("Test groups:\n\n", .{});
-                for(groups) |g| {
-                    try printer.print("{?s}: tag='{s}'.\n", .{g.name, g.tag});
+                for (groups) |g| {
+                    try printer.print("{?s}: tag='{s}'.\n", .{ g.name, g.tag });
                 }
 
                 try printer.print("\n\nUse the tag names as arguments to the test program to run that group.  Multiple group tags can be included.\n", .{});
-            }
-            else {
+            } else {
                 try GroupTitleStyle.set(printer);
                 try printer.print("Test groups", .{});
                 try Style.reset(printer);
                 try printer.print(":\n\n", .{});
 
-                for(groups) |g| {
+                for (groups) |g| {
                     try GroupNameStyle.set(printer);
                     try printer.print("{?s}", .{g.name});
                     try Style.reset(printer);
-                    
+
                     try printer.print(": tag=", .{});
-                    
+
                     try GroupTagStyle.set(printer);
-                    try printer.print("'{s}'", .{g.tag}); 
+                    try printer.print("'{s}'", .{g.tag});
                     try Style.reset(printer);
 
                     try printer.print(".\n", .{});
@@ -622,8 +582,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
 
                 try printer.print("\n\nUse the tag names as arguments to the test program to run that group.  Multiple group tags can be included.\n", .{});
             }
-        }
-        else {
+        } else {
             try printer.print("No test groups found!\n", .{});
         }
 
@@ -635,23 +594,20 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
     else {
         const verbose = args.hasOption("verbose");
         const optPrintStackTrace = args.hasOption("stack_trace");
-        
-        const filters = (if(args.positional.items.len > 0) blk: {
+
+        const filters = (if (args.positional.items.len > 0) blk: {
             break :blk args.positional.items;
         } else null);
 
         // var memBuff = try Printer.memory(std.heap.page_allocator);
         // defer memBuff.deinit();
 
-        _ = try runTests(
-            testsToRun,
-            .{
-                .verbose = verbose,
-                .allowFilters = filters,
-                .printStackTraceOnFail = optPrintStackTrace,
-                .printColor = optPrintColor,
-                // .writer = memBuff,
-            }
-        );
+        _ = try runTests(testsToRun, .{
+            .verbose = verbose,
+            .allowFilters = filters,
+            .printStackTraceOnFail = optPrintStackTrace,
+            .printColor = optPrintColor,
+            // .writer = memBuff,
+        });
     }
 }
