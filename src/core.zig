@@ -57,6 +57,8 @@ pub const TestFailure = struct {
     lineNo: usize,
     errorMessage: ?[]const u8,
     stackTrace: ?[]const u8,
+    capturedStdout: ?[]u8 = null,
+    capturedStderr: ?[]u8 = null,
     alloc: std.mem.Allocator,
 
     pub fn init(testName: []const u8, alloc: std.mem.Allocator) !TestFailure {
@@ -73,5 +75,7 @@ pub const TestFailure = struct {
         self.alloc.free(self.testName);
         if (self.errorMessage != null) self.alloc.free(self.errorMessage.?);
         if (self.stackTrace != null) self.alloc.free(self.stackTrace.?);
+        if (self.capturedStdout != null) self.alloc.free(self.capturedStdout.?);
+        if (self.capturedStderr != null) self.alloc.free(self.capturedStderr.?);
     }
 };

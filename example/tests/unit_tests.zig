@@ -20,6 +20,7 @@ const LocalExampleTests = struct {
     }
 
     pub fn gonnaFailTest() !void {
+        std.log.debug("Testing output capture.", .{});
         try testz.expectEqual(add(1, 2), 12);
     }
 

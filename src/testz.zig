@@ -20,6 +20,10 @@ pub const TestContext = @import("./context__testz.zig").TestContext;
 const discovery = @import("./discovery.zig");
 pub const discoverTests = discovery.discoverTests;
 
+const capture_mod = @import("./capture.zig");
+pub const OutputCapture = capture_mod.OutputCapture;
+pub const CapturedOutput = capture_mod.CapturedOutput;
+
 const DarkGray = "\x1b[90m";
 const Red = "\x1b[91m";
 const DarkGreen = "\x1b[32m";
@@ -41,6 +45,10 @@ pub const RunTestOpts = struct {
     dummyTiming: bool = false,
     writer: ?Printer = null,
     testContext: ?*TestContext = null,
+    /// Capture stdout/stderr written during each test at the OS fd level.
+    /// Captured output from failing tests is shown in the failure section.
+    /// Captured output from passing tests is shown inline in verbose mode.
+    captureOutput: bool = false,
 };
 
 pub const InfoOpts = struct {
@@ -217,6 +225,63 @@ fn startsWithSkip(name: []const u8) bool {
     return name.len >= 5 and std.mem.eql(u8, name[0..5], "skip_");
 }
 
+fn printCapturedOutput(writer: *Printer, stdout: []const u8, stderr: []const u8, printColor: bool) !void {
+    if (stdout.len > 0) {
+        const trimmed = std.mem.trimRight(u8, stdout, "\r\n");
+        if (trimmed.len > 0) {
+            if (printColor) try writer.print(DarkGray, .{});
+            try writer.print("\n  [stdout] ", .{});
+            if (printColor) try writer.print(Reset, .{});
+            try writer.print("{s}", .{trimmed});
+        }
+    }
+    if (stderr.len > 0) {
+        const trimmed = std.mem.trimRight(u8, stderr, "\r\n");
+        if (trimmed.len > 0) {
+            if (printColor) try writer.print(DarkGray, .{});
+            try writer.print("\n  [stderr] ", .{});
+            if (printColor) try writer.print(Reset, .{});
+            try writer.print("{s}", .{trimmed});
+        }
+    }
+}
+
+fn printMarkAndTime(
+    errorCaught: bool,
+    testsPassed: *u32,
+    testStartTime: std.time.Instant,
+    writer: *Printer,
+    printColor: bool,
+    opts: RunTestOpts,
+) !u64 {
+    // If we passed, print a dot in non-verbose mode and a check-mark in verbose.
+    if (!errorCaught) {
+        testsPassed.* += 1;
+
+        if (printColor) try writer.print(Green, .{});
+
+        if (opts.verbose) {
+            try writer.print("\u{2713}", .{});
+        } else {
+            try writer.print("\u{22c5}", .{});
+        }
+
+        if (printColor) try writer.print(Reset, .{});
+    }
+
+    const testEndTime = try std.time.Instant.now();
+    const testAmountNs = testEndTime.since(testStartTime);
+
+    if (opts.verbose) {
+        try printTestTime(writer, testAmountNs, .{
+            .printColor = printColor,
+            .dummyTiming = opts.dummyTiming,
+        });
+    }
+
+    return testAmountNs;
+}
+
 /// Takes a slice of TestFuncInfo and runs them using the given options
 /// to handle filtering and how to display the results.
 pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
@@ -391,6 +456,15 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
                 continue;
             }
 
+            // Flush before redirecting fds so framework output already in the
+            // buffer reaches the real stdout, not the capture pipe.
+            if (opts.captureOutput) try writer.flush();
+
+            var cap: capture_mod.OutputCapture = undefined;
+            if (opts.captureOutput) {
+                cap = try capture_mod.OutputCapture.begin();
+            }
+
             var errorCaught = false;
             f.func() catch {
 
@@ -402,32 +476,48 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
                 testsFailed += 1;
             };
 
-            // If we passed, print a dot in non-verbose mode and a check-mark in verbose.
-            if (!errorCaught) {
-                testsPassed += 1;
+            // End capture and route output to the right place.
+            if (opts.captureOutput) {
+                const captured = try cap.end(alloc);
 
-                if (printColor) try writer.print(Green, .{});
+                var stdout_transferred = false;
+                var stderr_transferred = false;
 
-                if (opts.verbose) {
-                    try writer.print("\u{2713}", .{});
-                } else {
-                    try writer.print("\u{22c5}", .{});
+                if (errorCaught) {
+                    // Attach captured output to the TestFailure record for this
+                    // test so it appears in the failure summary at the end.
+                    const fail_items = GlobalTestContext.?.failures.items;
+                    if (fail_items.len > 0) {
+                        const last = &fail_items[fail_items.len - 1];
+                        if (std.mem.eql(u8, last.testName, testPrintName)) {
+                            if (captured.stdout.len > 0) {
+                                last.capturedStdout = captured.stdout;
+                                stdout_transferred = true;
+                            }
+                            if (captured.stderr.len > 0) {
+                                last.capturedStderr = captured.stderr;
+                                stderr_transferred = true;
+                            }
+                        }
+                    }
                 }
 
-                if (printColor) try writer.print(Reset, .{});
+                totalTestTimeNs += try printMarkAndTime(errorCaught, &testsPassed, testStartTime, &writer, printColor, opts);
+
+                // Show captured output inline in verbose mode for passing tests,
+                // or for failing tests that had no TestFailure record (raw error).
+                if (opts.verbose and (!errorCaught or (!stdout_transferred and !stderr_transferred))) {
+                    try printCapturedOutput(&writer, captured.stdout, captured.stderr, printColor);
+                }
+
+                // Free any slices that weren't transferred to a TestFailure.
+                if (!stdout_transferred) alloc.free(captured.stdout);
+                if (!stderr_transferred) alloc.free(captured.stderr);
+            } else {
+                // Just print the mark and time if not capturing output.
+                totalTestTimeNs += try printMarkAndTime(errorCaught, &testsPassed, testStartTime, &writer, printColor, opts);
             }
 
-            const testEndTime = try std.time.Instant.now();
-            const testAmountNs = testEndTime.since(testStartTime);
-
-            if (opts.verbose) {
-                try printTestTime(&writer, testAmountNs, .{
-                    .printColor = printColor,
-                    .dummyTiming = opts.dummyTiming,
-                });
-            }
-
-            totalTestTimeNs += testAmountNs;
             try writer.flush();
         }
 
@@ -443,6 +533,14 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             try writer.print("\nFAIL {s}", .{failure.testName});
         }
         try writer.print(": {?s}", .{failure.errorMessage});
+        if (failure.capturedStdout != null or failure.capturedStderr != null) {
+            try printCapturedOutput(
+                &writer,
+                failure.capturedStdout orelse "",
+                failure.capturedStderr orelse "",
+                printColor,
+            );
+        }
         if (opts.printStackTraceOnFail) {
             if (failure.stackTrace != null) {
                 try writer.print("{?s}\n", .{failure.stackTrace});
@@ -511,6 +609,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
         Option{ .longName = "stack_trace", .shortName = "s", .description = "Print stack traces on errors", .maxNumParams = 0, .default = zargs.DefaultValue.set() },
         Option{ .longName = "groups", .shortName = "g", .description = "Lists the groups of tests", .maxNumParams = 0 },
         Option{ .longName = "color", .description = "Forces color output", .maxNumParams = 0, .default = zargs.DefaultValue.set() },
+        Option{ .longName = "capture", .shortName = "c", .description = "Capture stdout/stderr per test; show on failure", .maxNumParams = 0, .default = zargs.DefaultValue.set() },
         Option{ .longName = "help", .shortName = "h", .description = "Prints out the help text." },
     } });
     defer parser.deinit();
@@ -594,20 +693,18 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
     else {
         const verbose = args.hasOption("verbose");
         const optPrintStackTrace = args.hasOption("stack_trace");
+        const captureOutput = args.hasOption("capture");
 
         const filters = (if (args.positional.items.len > 0) blk: {
             break :blk args.positional.items;
         } else null);
-
-        // var memBuff = try Printer.memory(std.heap.page_allocator);
-        // defer memBuff.deinit();
 
         _ = try runTests(testsToRun, .{
             .verbose = verbose,
             .allowFilters = filters,
             .printStackTraceOnFail = optPrintStackTrace,
             .printColor = optPrintColor,
-            // .writer = memBuff,
+            .captureOutput = captureOutput,
         });
     }
 }
