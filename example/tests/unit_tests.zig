@@ -11,6 +11,7 @@ const LocalExampleTests = struct {
     }
 
     pub fn shouldPassTest() !void {
+        std.log.debug("Will only print output with -p option since this test passes.", .{});
         try testz.expectTrue(helpFunction());
         try testz.expectEqual(add(10, 20), 30);
     }

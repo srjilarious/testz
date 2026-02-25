@@ -47,8 +47,11 @@ pub const RunTestOpts = struct {
     testContext: ?*TestContext = null,
     /// Capture stdout/stderr written during each test at the OS fd level.
     /// Captured output from failing tests is shown in the failure section.
-    /// Captured output from passing tests is shown inline in verbose mode.
+    /// Captured output from passing tests is only shown when printAllOutput is true.
     captureOutput: bool = false,
+    /// When captureOutput is true, print captured output for all tests inline,
+    /// not just failures.
+    printAllOutput: bool = false,
 };
 
 pub const InfoOpts = struct {
@@ -504,9 +507,11 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
 
                 totalTestTimeNs += try printMarkAndTime(errorCaught, &testsPassed, testStartTime, &writer, printColor, opts);
 
-                // Show captured output inline in verbose mode for passing tests,
+                // Show captured output inline when printAllOutput is set (passing tests),
                 // or for failing tests that had no TestFailure record (raw error).
-                if (opts.verbose and (!errorCaught or (!stdout_transferred and !stderr_transferred))) {
+                const showInline = (opts.printAllOutput and !errorCaught) or
+                    (errorCaught and !stdout_transferred and !stderr_transferred);
+                if (showInline) {
                     try printCapturedOutput(&writer, captured.stdout, captured.stderr, printColor);
                 }
 
@@ -610,6 +615,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
         Option{ .longName = "groups", .shortName = "g", .description = "Lists the groups of tests", .maxNumParams = 0 },
         Option{ .longName = "color", .description = "Forces color output", .maxNumParams = 0, .default = zargs.DefaultValue.set() },
         Option{ .longName = "capture", .shortName = "c", .description = "Capture stdout/stderr per test; show on failure", .maxNumParams = 0, .default = zargs.DefaultValue.set() },
+        Option{ .longName = "print-output", .shortName = "p", .description = "Print all captured output inline, not just on failures", .maxNumParams = 0 },
         Option{ .longName = "help", .shortName = "h", .description = "Prints out the help text." },
     } });
     defer parser.deinit();
@@ -694,6 +700,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
         const verbose = args.hasOption("verbose");
         const optPrintStackTrace = args.hasOption("stack_trace");
         const captureOutput = args.hasOption("capture");
+        const printAllOutput = args.hasOption("print-output");
 
         const filters = (if (args.positional.items.len > 0) blk: {
             break :blk args.positional.items;
@@ -705,6 +712,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
             .printStackTraceOnFail = optPrintStackTrace,
             .printColor = optPrintColor,
             .captureOutput = captureOutput,
+            .printAllOutput = printAllOutput,
         });
     }
 }
