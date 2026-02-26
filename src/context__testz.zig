@@ -273,6 +273,120 @@ pub const TestContext = struct {
 // Stack tracing helpers
 // Code mostly pulled from std.debug directly.
 // ----------------------------------------------------------------------------
+
+// Windows-specific PDB-based stack trace that bypasses std.fs.selfExeDirPath
+// (which fails under Wine).  Loads the PDB file directly using GetModuleFileNameW.
+// Returns error if the PDB cannot be found or parsed; caller should fall back.
+fn printWindowsPdbTrace(
+    alloc: std.mem.Allocator,
+    failure: *TestFailure,
+    out_stream: anytype,
+    first_out: *bool,
+    printColor: bool,
+    addr_buf: []const usize,
+) !void {
+    const windows = std.os.windows;
+
+    // Get image base from the PEB.
+    const image_base = @intFromPtr(windows.peb().ImageBaseAddress);
+
+    // Read SizeOfImage from the PE optional header.
+    // Layout: DOS header → PE offset at +0x3c → PE signature (4) + COFF header (20)
+    //         → Optional header.  For PE32+, size_of_image is at optional header + 56.
+    const pe_offset: usize = @as(*align(1) const u32, @ptrFromInt(image_base + 0x3c)).*;
+    const size_of_image: usize = @as(*align(1) const u32, @ptrFromInt(image_base + pe_offset + 4 + 20 + 56)).*;
+
+    // Build a Coff view of the in-memory (loaded) image.
+    const image_slice = @as([*]const u8, @ptrFromInt(image_base))[0..size_of_image];
+    var coff_obj = try std.coff.Coff.init(image_slice, true);
+
+    // Pull the PDB filename (relative path like "unit_tests.pdb") from the debug directory.
+    const pdb_filename = try coff_obj.getPdbPath() orelse return error.MissingDebugInfo;
+
+    // GetModuleFileNameW works under Wine; selfExeDirPath does not (realpathW fails).
+    var exe_path_w: [windows.PATH_MAX_WIDE:0]u16 = undefined;
+    const exe_path_w_len = windows.kernel32.GetModuleFileNameW(
+        null,
+        &exe_path_w,
+        windows.PATH_MAX_WIDE,
+    );
+    if (exe_path_w_len == 0) return error.Unexpected;
+
+    var exe_path_utf8: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_path_len = std.unicode.wtf16LeToWtf8(&exe_path_utf8, exe_path_w[0..exe_path_w_len]);
+    const exe_dir = std.fs.path.dirname(exe_path_utf8[0..exe_path_len]) orelse return error.Unexpected;
+
+    // Build the full PDB path and open it.
+    var pdb_path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const pdb_path = try std.fmt.bufPrint(&pdb_path_buf, "{s}\\{s}", .{ exe_dir, pdb_filename });
+
+    var pdb_obj = try std.debug.Pdb.init(alloc, pdb_path);
+    defer pdb_obj.deinit();
+
+    try pdb_obj.parseInfoStream();
+
+    // Verify GUID + age so we know this PDB matches the binary.
+    if (!std.mem.eql(u8, &coff_obj.guid, &pdb_obj.guid) or coff_obj.age != pdb_obj.age)
+        return error.InvalidDebugInfo;
+
+    try pdb_obj.parseDbiStream();
+
+    // Section headers are needed to translate virtual addresses to PDB offsets.
+    const section_headers = try coff_obj.getSectionHeadersAlloc(alloc);
+    defer alloc.free(section_headers);
+
+    for (addr_buf) |addr| {
+        // Subtract 1 to get the call-site address (same as writeStackTraceWindows).
+        const address = addr -| 1;
+        if (address < image_base) continue;
+        const relocated: usize = address - image_base;
+
+        // Walk PDB section contributions to find which module owns this address.
+        var match_section: *const std.coff.SectionHeader = undefined;
+        const mod_index: usize = for (pdb_obj.sect_contribs) |sc| {
+            if (sc.section == 0 or sc.section > section_headers.len) continue;
+            match_section = &section_headers[sc.section - 1];
+            const va_start: usize = @as(usize, match_section.virtual_address) + sc.offset;
+            const va_end: usize = va_start + sc.size;
+            if (relocated >= va_start and relocated < va_end) break sc.module_index;
+        } else continue; // not in any contribution → skip (system/stub frames)
+
+        const module = (try pdb_obj.getModule(mod_index)) orelse continue;
+
+        // Offset within the section used for both symbol and line lookups.
+        const sec_offset: u64 = relocated - match_section.virtual_address;
+
+        // Get line info; allocates file_name with pdb_obj's allocator (== alloc).
+        const li = pdb_obj.getLineNumberInfo(module, sec_offset) catch continue;
+        defer alloc.free(li.file_name);
+
+        // Apply testz framework filters.
+        if (std.mem.endsWith(u8, li.file_name, "__testz.zig")) continue;
+        if (std.mem.endsWith(u8, li.file_name, "/testz.zig")) continue;
+        if (std.mem.endsWith(u8, li.file_name, "\\testz.zig")) continue;
+        // Skip Zig runtime startup frames (Windows equivalent of posixCallMainAndExit).
+        if (std.mem.endsWith(u8, li.file_name, "/start.zig")) continue;
+        if (std.mem.endsWith(u8, li.file_name, "\\start.zig")) continue;
+
+        // Skip the main entry point by symbol name.
+        const sym_name = pdb_obj.getSymbolName(module, sec_offset) orelse "";
+        if (std.mem.eql(u8, sym_name, "main")) continue;
+
+        if (printColor) {
+            std.fmt.format(out_stream, "\n{s}:" ++ White ++ "{d}" ++ Reset ++ ":{d}:\n", .{ li.file_name, li.line, li.column }) catch break;
+        } else {
+            std.fmt.format(out_stream, "\n{s}:{d}:{d}:\n", .{ li.file_name, li.line, li.column }) catch break;
+        }
+
+        if (first_out.*) {
+            failure.lineNo = li.line;
+            first_out.* = false;
+        }
+
+        // Source-file context display; may fail on Wine since paths are Linux-style.
+        printLinesFromFileAnyOs(out_stream, li, 3, printColor) catch {};
+    }
+}
 fn printLinesFromFileAnyOs(out_stream: anytype, line_info: std.debug.SourceLocation, context_amount: u64, printColor: bool) !void {
     // Need this to always block even in async I/O mode, because this could potentially
     // be called from e.g. the event loop code crashing.
@@ -351,101 +465,76 @@ fn printStackTrace(failure: *TestFailure, printColor: bool) !void {
         stderr.print("Unable to dump stack trace: debug info stripped\n", .{}) catch return;
         return;
     }
-    const debug_info = std.debug.getSelfDebugInfo() catch |err| {
-        stderr.print("Unable to dump stack trace: Unable to open debug info: {s}\n", .{@errorName(err)}) catch return;
-        return;
-    };
-
-    if (native_os == .windows) {
-        var context: std.debug.ThreadContext = undefined;
-        const tty_config = io.tty.detectConfig(std.fs.File.stderr());
-        std.debug.assert(std.debug.getContext(&context));
-        return std.debug.writeStackTraceWindows(stderr, debug_info, tty_config, &context, null);
-    }
-
-    var context: std.debug.ThreadContext = undefined;
-    const has_context = std.debug.getContext(&context);
-
-    var it = (if (has_context) blk: {
-        break :blk std.debug.StackIterator.initWithContext(null, debug_info, &context) catch null;
-    } else null) orelse std.debug.StackIterator.init(null, null);
-    defer it.deinit();
-
-    //     while (it.next()) |return_address| {
-    //         printLastUnwindError(&it, debug_info, out_stream, tty_config);
-
-    //         // On arm64 macOS, the address of the last frame is 0x0 rather than 0x1 as on x86_64 macOS,
-    //         // therefore, we do a check for `return_address == 0` before subtracting 1 from it to avoid
-    //         // an overflow. We do not need to signal `StackIterator` as it will correctly detect this
-    //         // condition on the subsequent iteration and return `null` thus terminating the loop.
-    //         // same behaviour for x86-windows-msvc
-    //         const address = return_address -| 1;
-    //         try printSourceAtAddress(debug_info, out_stream, address, tty_config);
-    //     } else printLastUnwindError(&it, debug_info, out_stream, tty_config);
-
-    //     // std.debug.writeCurrentStackTrace(out_stream, debug_info, tty_config, null) catch |err| {
-    //     //     stderr.print("Unable to dump stack trace: {s}\n", .{@errorName(err)}) catch return;
-    //     //     return;
-    //     // };
-
-    //     failure.stackTrace = try trace.toOwnedSlice();
-    // }
-
     var trace: StringBuilder = .{};
     // Preallocate some space for the stack trace.
     try trace.ensureTotalCapacity(failure.alloc, 2048);
     const out_stream = trace.writer(failure.alloc);
     defer trace.deinit(failure.alloc);
     var first = true;
-    while (it.next()) |return_address| {
-        const module = debug_info.getModuleForAddress(return_address) catch {
-            break;
-            // switch (err) {
-            //     error.MissingDebugInfo, error.InvalidDebugInfo => return err, //printUnknownSource(debug_info, out_stream, address, tty_config),
-            //     else => return err,
-            // }
+
+    if (native_os == .windows) {
+        // On Windows, walk the stack and resolve via PDB using our Wine-compatible helper.
+        // getSelfDebugInfo() is intentionally NOT called here: it uses selfExeDirPath which
+        // calls realpathW / GetFinalPathNameByHandle, and that fails under Wine.
+        var context: std.debug.ThreadContext = undefined;
+        std.debug.assert(std.debug.getContext(&context));
+
+        var addr_buf: [256]usize = undefined;
+        const n = std.debug.walkStackWindows(addr_buf[0..], &context);
+
+        printWindowsPdbTrace(failure.alloc, failure, out_stream, &first, printColor, addr_buf[0..n]) catch {};
+    } else {
+        const debug_info = std.debug.getSelfDebugInfo() catch |err| {
+            stderr.print("Unable to dump stack trace: Unable to open debug info: {s}\n", .{@errorName(err)}) catch return;
+            return;
         };
 
-        const symbol_info = module.getSymbolAtAddress(debug_info.allocator, return_address) catch {
-            break;
-            // switch (err) {
-            //     error.MissingDebugInfo, error.InvalidDebugInfo => , // printUnknownSource(debug_info, out_stream, address, tty_config),
-            //     else => return err,
-            // }
-        };
-        defer if (symbol_info.source_location) |sl| debug_info.allocator.free(sl.file_name);
+        var context: std.debug.ThreadContext = undefined;
+        const has_context = std.debug.getContext(&context);
 
-        if (std.mem.eql(u8, symbol_info.name, "posixCallMainAndExit"))
-            break;
+        var it = (if (has_context) blk: {
+            break :blk std.debug.StackIterator.initWithContext(null, debug_info, &context) catch null;
+        } else null) orelse std.debug.StackIterator.init(null, null);
+        defer it.deinit();
 
-        const line_info = symbol_info.source_location;
-        if (line_info) |*li| {
+        while (it.next()) |return_address| {
+            const module = debug_info.getModuleForAddress(return_address) catch {
+                break;
+            };
 
-            // Skip printing frames within the framework.
-            if (std.mem.endsWith(u8, li.file_name, "__testz.zig")) continue;
-            if (std.mem.endsWith(u8, li.file_name, "/testz.zig")) continue;
-            // Skip over the call to runTests, assuming it's in `main`
-            if (std.mem.eql(u8, symbol_info.name, "main")) continue;
+            const symbol_info = module.getSymbolAtAddress(debug_info.allocator, return_address) catch {
+                break;
+            };
+            defer if (symbol_info.source_location) |sl| debug_info.allocator.free(sl.file_name);
 
-            // std.debug.print("*** Symbol: {s}, {s}\n", .{symbol_info.symbol_name, symbol_info.compile_unit_name});
-            if (printColor) {
-                std.fmt.format(out_stream, "\n{s}:" ++ White ++ "{d}" ++ Reset ++ ":{d}:\n", .{ li.file_name, li.line, li.column }) catch break;
+            if (std.mem.eql(u8, symbol_info.name, "posixCallMainAndExit"))
+                break;
+
+            const line_info = symbol_info.source_location;
+            if (line_info) |*li| {
+                // Skip printing frames within the framework.
+                if (std.mem.endsWith(u8, li.file_name, "__testz.zig")) continue;
+                if (std.mem.endsWith(u8, li.file_name, "/testz.zig")) continue;
+                // Skip over the call to runTests, assuming it's in `main`
+                if (std.mem.eql(u8, symbol_info.name, "main")) continue;
+
+                if (printColor) {
+                    std.fmt.format(out_stream, "\n{s}:" ++ White ++ "{d}" ++ Reset ++ ":{d}:\n", .{ li.file_name, li.line, li.column }) catch break;
+                } else {
+                    std.fmt.format(out_stream, "\n{s}:{d}:{d}:\n", .{ li.file_name, li.line, li.column }) catch break;
+                }
+
+                if (first) {
+                    failure.lineNo = li.line;
+                    first = false;
+                }
             } else {
-                std.fmt.format(out_stream, "\n{s}:{d}:{d}:\n", .{ li.file_name, li.line, li.column }) catch break;
+                _ = out_stream.write("???:?:?\n") catch break;
             }
 
-            if (first) {
-                failure.lineNo = li.line;
-                first = false;
+            if (line_info) |li| {
+                printLinesFromFileAnyOs(out_stream, li, 3, printColor) catch {};
             }
-        } else {
-            _ = out_stream.write("???:?:?\n") catch break;
-        }
-
-        // try stderr.print(" 0x{x} in {s} ({s})\n\n", .{ return_address, symbol_info.symbol_name, symbol_info.compile_unit_name });
-
-        if (line_info) |li| {
-            printLinesFromFileAnyOs(out_stream, li, 3, printColor) catch {};
         }
     }
 
