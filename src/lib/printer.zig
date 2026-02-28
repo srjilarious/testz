@@ -1,4 +1,3 @@
-// zig fmt: off
 const std = @import("std");
 
 pub const Color = enum {
@@ -18,7 +17,7 @@ pub const Color = enum {
     BrightBlue,
     BrightMagenta,
     BrightCyan,
-    BrightWhite
+    BrightWhite,
 };
 
 pub const TextStyle = packed struct {
@@ -43,27 +42,26 @@ pub const Style = struct {
     }
 
     pub fn set(self: *const Style, printer: Printer) !void {
-        if(!printer.supportsColor()) return;
+        if (!printer.supportsColor()) return;
 
-        if(self.fg == .Reset or self.bg == .Reset or self.mod.none()) {
+        if (self.fg == .Reset or self.bg == .Reset or self.mod.none()) {
             try reset(printer);
         }
-        
-        if(self.mod.dim) {
+
+        if (self.mod.dim) {
             try printer.print("\x1b[2m", .{});
         }
-        if(self.mod.bold) {
+        if (self.mod.bold) {
             try printer.print("\x1b[1m", .{});
         }
-        if(self.mod.italic) {
+        if (self.mod.italic) {
             try printer.print("\x1b[3m", .{});
         }
-        if(self.mod.underline) {
+        if (self.mod.underline) {
             try printer.print("\x1b[4m", .{});
         }
 
-        switch(self.bg) 
-        {
+        switch (self.bg) {
             .Black => try printer.print("\x1b[40m", .{}),
             .Red => try printer.print("\x1b[41m", .{}),
             .Green => try printer.print("\x1b[42m", .{}),
@@ -83,8 +81,7 @@ pub const Style = struct {
             else => {},
         }
 
-        switch(self.fg) 
-        {
+        switch (self.fg) {
             .Black => try printer.print("\x1b[30m", .{}),
             .Red => try printer.print("\x1b[31m", .{}),
             .Green => try printer.print("\x1b[32m", .{}),
@@ -139,7 +136,7 @@ pub const Printer = union(enum) {
     file: *FilePrinterData,
     array: *ArrayPrinterData,
     _debug: bool,
-    
+
     pub fn stdout(alloc: std.mem.Allocator) !Printer {
         const f = try alloc.create(FilePrinterData);
         f.* = FilePrinterData.init(alloc, std.fs.File.stdout()) catch {
@@ -147,13 +144,13 @@ pub const Printer = union(enum) {
             return error.OutOfMemory;
         };
 
-        return .{.file = f};
+        return .{ .file = f };
     }
 
     pub fn memory(alloc: std.mem.Allocator) !Printer {
         const a = try alloc.create(ArrayPrinterData);
-        a.* = .{  .alloc = alloc, .writer = std.io.Writer.Allocating.init(alloc) };
-        return .{ .array = a};
+        a.* = .{ .alloc = alloc, .writer = std.io.Writer.Allocating.init(alloc) };
+        return .{ .array = a };
     }
 
     pub fn debug() Printer {
@@ -161,8 +158,7 @@ pub const Printer = union(enum) {
     }
 
     pub fn deinit(self: *Printer) void {
-        
-        switch(self.*) {
+        switch (self.*) {
             .array => |arr| {
                 arr.writer.deinit();
                 arr.alloc.destroy(self.array);
@@ -172,13 +168,12 @@ pub const Printer = union(enum) {
                 f.deinit();
                 alloc.destroy(self.file);
             },
-            else => {}
+            else => {},
         }
     }
 
-    pub fn print(self: *const Printer, comptime format: []const u8, args: anytype) anyerror!void
-    {
-        switch(self.*) {
+    pub fn print(self: *const Printer, comptime format: []const u8, args: anytype) anyerror!void {
+        switch (self.*) {
             .array => |a| try a.writer.writer.print(format, args),
             .file => |f| {
                 try f.writer.interface.print(format, args);
@@ -195,9 +190,8 @@ pub const Printer = union(enum) {
         }
     }
 
-    pub fn flush(self: *const Printer) anyerror!void
-    {
-        switch(self.*) {
+    pub fn flush(self: *const Printer) anyerror!void {
+        switch (self.*) {
             .array => |_| {},
             .file => |f| try f.writer.interface.flush(),
             ._debug => {},
@@ -205,31 +199,31 @@ pub const Printer = union(enum) {
     }
 
     pub fn supportsColor(self: *const Printer) bool {
-        return switch(self.*) {
+        return switch (self.*) {
             .file => |f| f.colorOutput,
             ._debug => |_| std.fs.File.stdout().supportsAnsiEscapeCodes(),
-            else => { return false; },
+            else => {
+                return false;
+            },
         };
     }
-    
+
     pub fn printWrapped(
-            self: *Printer, 
-            value: []const u8, 
-            startLineLen: usize, 
-            currIndentAmount: usize, 
-            maxLineLength: usize
-        ) !usize 
-    {
+        self: *Printer,
+        value: []const u8,
+        startLineLen: usize,
+        currIndentAmount: usize,
+        maxLineLength: usize,
+    ) !usize {
         var start: usize = 0;
         var currLineLen = startLineLen;
         var prevWordLoc: usize = 0;
 
         var idx: usize = 0;
-        while(idx < value.len) {
-            if(value[idx] == ' ') {
+        while (idx < value.len) {
+            if (value[idx] == ' ') {
                 prevWordLoc = idx;
-            }
-            else if(value[idx] == '\n') {
+            } else if (value[idx] == '\n') {
                 try self.print("{s}", .{value[start..idx]});
                 try self.printNum(" ", currIndentAmount);
                 currLineLen = currIndentAmount;
@@ -237,15 +231,15 @@ pub const Printer = union(enum) {
                 idx += 1;
             }
 
-            if((currLineLen + idx - start) >= maxLineLength) {
+            if ((currLineLen + idx - start) >= maxLineLength) {
                 // hyphenation here.
-                if(start >= prevWordLoc) {
-                    try self.print("{s}-\n", .{value[start..idx-1]});
+                if (start >= prevWordLoc) {
+                    try self.print("{s}-\n", .{value[start .. idx - 1]});
                     try self.printNum(" ", currIndentAmount);
                     currLineLen = currIndentAmount;
                     start = idx - 1;
                     prevWordLoc = start;
-                } 
+                }
                 // word wrap break
                 else {
                     try self.print("{s}\n", .{value[start..prevWordLoc]});
@@ -261,7 +255,7 @@ pub const Printer = union(enum) {
         // TODO: add print rest of value in word wrap case.
         //if((currLineLen + left) >= maxLine)
         const left: usize = value.len - start;
-        try self.print("{s}", .{value[start..start+left]});
+        try self.print("{s}", .{value[start .. start + left]});
         currLineLen += left;
 
         return currLineLen;

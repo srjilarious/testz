@@ -387,6 +387,7 @@ fn printWindowsPdbTrace(
         printLinesFromFileAnyOs(out_stream, li, 3, printColor) catch {};
     }
 }
+
 fn printLinesFromFileAnyOs(out_stream: anytype, line_info: std.debug.SourceLocation, context_amount: u64, printColor: bool) !void {
     // Need this to always block even in async I/O mode, because this could potentially
     // be called from e.g. the event loop code crashing.
@@ -543,9 +544,4 @@ fn printStackTrace(failure: *TestFailure, printColor: bool) !void {
     }
 
     failure.stackTrace = try trace.toOwnedSlice(failure.alloc);
-
-    // std.debug.writeCurrentStackTrace(stderr, debug_info, std.io.tty.detectConfig(std.io.getStdErr()), null) catch |err| {
-    //     stderr.print("Unable to dump stack trace: {s}\n", .{@errorName(err)}) catch return;
-    //     return;
-    // };
 }

@@ -4,8 +4,7 @@ const builtin = @import("builtin");
 // POSIX pipe/dup/dup2 is available on Linux, macOS, and other POSIX-like systems.
 // Windows requires a different approach (CreatePipe + SetStdHandle) — not yet implemented.
 const is_posix = switch (builtin.os.tag) {
-    .linux, .macos, .ios, .tvos, .watchos, .freebsd, .openbsd, .netbsd,
-    .dragonfly, .solaris, .illumos, .haiku => true,
+    .linux, .macos, .ios, .tvos, .watchos, .freebsd, .openbsd, .netbsd, .dragonfly, .solaris, .illumos, .haiku => true,
     else => false,
 };
 
@@ -45,7 +44,9 @@ pub const OutputCapture = if (is_posix) struct {
     stdout_read: std.posix.fd_t,
     stderr_read: std.posix.fd_t,
 
-    pub fn begin() !@This() {
+    const Self = @This();
+
+    pub fn begin() !Self {
         const posix = std.posix;
 
         const stdout_pipe = try posix.pipe();
@@ -84,7 +85,7 @@ pub const OutputCapture = if (is_posix) struct {
         };
     }
 
-    pub fn end(self: *@This(), alloc: std.mem.Allocator) !CapturedOutput {
+    pub fn end(self: *Self, alloc: std.mem.Allocator) !CapturedOutput {
         const posix = std.posix;
 
         // Always close the read ends when we return, even on error.
@@ -122,12 +123,14 @@ pub const OutputCapture = if (is_posix) struct {
         return list.toOwnedSlice(alloc);
     }
 } else struct {
+    const Self = @This();
+
     // No-op on unsupported platforms (Windows, WASM, …).
-    pub fn begin() !@This() {
+    pub fn begin() !Self {
         return .{};
     }
 
-    pub fn end(self: *@This(), alloc: std.mem.Allocator) !CapturedOutput {
+    pub fn end(self: *Self, alloc: std.mem.Allocator) !CapturedOutput {
         _ = self;
         return .{
             .stdout = try alloc.dupe(u8, ""),
