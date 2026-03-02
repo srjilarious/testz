@@ -18,6 +18,7 @@ const mod2 = struct {
     pub fn func3() !void {}
 };
 
+//-------------------------------------------------------------------------------------------------
 const TestsSet1 = testz.discoverTests(.{
     testz.Group{ .name = "Mod 1 tests", .tag = "mod1", .mod = mod1 },
 }, .{});
@@ -26,6 +27,7 @@ pub fn testBasicTestDiscovery() !void {
     try testz.expectEqual(TestsSet1.len, 2);
 }
 
+//-------------------------------------------------------------------------------------------------
 const TestsSet2 = testz.discoverTests(.{
     testz.GroupList{ .name = "Mod tests", .tag = "mod", .mods = &.{ mod1, mod2 } },
 }, .{});

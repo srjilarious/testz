@@ -3,6 +3,7 @@ const testz = @import("testz");
 
 const runInternal = @import("./utils.zig").runInternal;
 
+//-------------------------------------------------------------------------------------------------
 fn allowNonTestzErrorsInternal() !void {
     const mem = try std.heap.page_allocator.alloc(u8, 10);
     defer std.heap.page_allocator.free(mem);
@@ -25,6 +26,7 @@ pub fn allowNonTestzErrors() !void {
     }, expected, .{});
 }
 
+//-------------------------------------------------------------------------------------------------
 fn alwaysFailTestInternal() !void {
     try testz.fail();
 }
@@ -46,6 +48,7 @@ pub fn alwaysFailTest() !void {
     }, expected, .{});
 }
 
+//-------------------------------------------------------------------------------------------------
 fn successTestInternal() !void {
     try testz.expectEqual(12, 12);
     try testz.expectEqualStr("hello", "hello");
@@ -71,6 +74,7 @@ pub fn successTest() !void {
     }, expected, .{});
 }
 
+//-------------------------------------------------------------------------------------------------
 fn skip_notReadyTestInternal() !void {
     // nothing to see here.
 }
