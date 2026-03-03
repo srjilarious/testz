@@ -19,6 +19,14 @@ pub const TestGroup = struct {
     tag: []const u8,
 };
 
+// Returned by getGroupList: a group with the names of all tests that belong to it.
+// The `tests` slice is caller-owned and must be freed with the same allocator.
+pub const TestGroupInfo = struct {
+    name: ?[]const u8,
+    tag: []const u8,
+    tests: []const []const u8,
+};
+
 // Struct for how a module can be passed in and associated as a group.
 pub const Group = struct {
     name: []const u8,

@@ -12,6 +12,7 @@ pub const TestFuncInfo = core.TestFuncInfo;
 const TestGroup = core.TestGroup;
 pub const Group = core.Group;
 pub const GroupList = core.GroupList;
+pub const TestGroupInfo = core.TestGroupInfo;
 const TestFuncGroup = core.TestFuncGroup;
 const TestFuncMap = core.TestFuncMap;
 
@@ -190,27 +191,40 @@ fn printGroupSeparatorLine(writer: *Printer, maxTestNameLength: usize, printColo
     //
 }
 
-/// Looks at the slice of tests and returns an owned slice of TestGroups
-/// which can be used to list the available filter tags, for example.
-pub fn getGroupList(tests: []const TestFuncInfo, opts: InfoOpts) ![]TestGroup {
-    var alloc: std.mem.Allocator = undefined;
-    if (opts.alloc != null) {
-        alloc = opts.alloc.?;
-    } else {
-        alloc = std.heap.page_allocator;
+/// Looks at the slice of tests and returns an owned slice of TestGroupInfo,
+/// each entry holding the group name/tag and an owned slice of the test names
+/// in that group (in the order they appear in `tests`).
+/// The caller must free each `TestGroupInfo.tests` slice and the returned slice
+/// itself using the same allocator (default: page_allocator).
+pub fn getGroupList(tests: []const TestFuncInfo, opts: InfoOpts) ![]TestGroupInfo {
+    const alloc = opts.alloc orelse std.heap.page_allocator;
+
+    // tag -> index into groupList, so we can append test names in one pass.
+    var tagToIdx = std.StringHashMap(usize).init(alloc);
+    defer tagToIdx.deinit();
+
+    var groupList: std.ArrayList(TestGroupInfo) = .{};
+    // testNameBuilders is parallel to groupList; entries are moved into groupList at the end.
+    var testNameBuilders: std.ArrayList(std.ArrayList([]const u8)) = .{};
+    defer {
+        // Free any builders not yet converted (only reached on error paths).
+        for (testNameBuilders.items) |*b| b.deinit(alloc);
+        testNameBuilders.deinit(alloc);
     }
 
-    var groupSeen = std.StringHashMap(bool).init(alloc);
-    defer groupSeen.deinit();
-
-    var groupList: std.ArrayList(TestGroup) = .{};
-    defer groupList.deinit(alloc);
-
     for (tests) |t| {
-        if (!groupSeen.contains(t.group.tag)) {
-            try groupList.append(alloc, t.group);
-            try groupSeen.put(t.group.tag, true);
+        const gop = try tagToIdx.getOrPut(t.group.tag);
+        if (!gop.found_existing) {
+            gop.value_ptr.* = groupList.items.len;
+            try groupList.append(alloc, .{ .name = t.group.name, .tag = t.group.tag, .tests = &.{} });
+            try testNameBuilders.append(alloc, .{});
         }
+        try testNameBuilders.items[gop.value_ptr.*].append(alloc, t.name);
+    }
+
+    // Transfer ownership of each name list into the corresponding TestGroupInfo.
+    for (groupList.items, testNameBuilders.items) |*g, *b| {
+        g.tests = try b.toOwnedSlice(alloc);
     }
 
     return groupList.toOwnedSlice(alloc);
@@ -655,13 +669,24 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
     }
     // List out the available group tags and names.
     else if (args.hasOption("groups")) {
+        const verbose = args.hasOption("verbose");
         const groups = try getGroupList(testsToRun, .{});
+        defer {
+            for (groups) |g| std.heap.page_allocator.free(g.tests);
+            std.heap.page_allocator.free(groups);
+        }
 
         if (groups.len > 0) {
             if (!args.hasOption("color")) {
                 try printer.print("Test groups:\n\n", .{});
                 for (groups) |g| {
                     try printer.print("{?s}: tag='{s}'.\n", .{ g.name, g.tag });
+                    if (verbose) {
+                        for (g.tests) |testName| {
+                            try printer.print("  - {s}\n", .{testName});
+                        }
+                        try printer.print("\n", .{});
+                    }
                 }
 
                 try printer.print("\n\nUse the tag names as arguments to the test program to run that group.  Multiple group tags can be included.\n", .{});
@@ -683,6 +708,16 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
                     try Style.reset(printer);
 
                     try printer.print(".\n", .{});
+
+                    if (verbose) {
+                        for (g.tests) |testName| {
+                            try printer.print(DarkGray, .{});
+                            try printer.print("  - {s}", .{testName});
+                            try printer.print(Reset, .{});
+                            try printer.print("\n", .{});
+                        }
+                        try printer.print("\n", .{});
+                    }
                 }
 
                 try printer.print("\n\nUse the tag names as arguments to the test program to run that group.  Multiple group tags can be included.\n", .{});
@@ -692,8 +727,6 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
         }
 
         try printer.flush();
-
-        std.heap.page_allocator.free(groups);
     }
     // Run the tests in this case.
     else {
