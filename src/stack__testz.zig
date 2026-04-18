@@ -148,6 +148,7 @@ pub fn printStackTrace(failure: *TestFailure, printColor: bool) !void {
             if (std.mem.endsWith(u8, loc.file_name, "__testz.zig")) continue;
             if (std.mem.endsWith(u8, loc.file_name, "/testz.zig")) continue;
             if (std.mem.indexOf(u8, loc.file_name, "/lib/std/") != null) continue;
+            if (std.mem.endsWith(u8, loc.file_name, "crtexe.c")) continue;
             if (sym.name) |n| if (std.mem.eql(u8, n, "main")) continue;
 
             // Record the first non-framework line for the failure summary.

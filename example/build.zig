@@ -124,7 +124,10 @@ pub fn build(b: *std.Build) void {
     // ----------------------------------------------------------------------
 
     // Creates a new executable to use testz and run our unit tests.
-    const testzMod = b.dependency("testz", .{});
+    const testzMod = b.dependency("testz", .{
+        .target = target,
+        .optimize = optimize,
+    });
 
     const testsExe = b.addExecutable(.{
         .name = "unit_tests",
