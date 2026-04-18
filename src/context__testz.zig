@@ -31,7 +31,7 @@ pub const TestContext = struct {
 
     pub fn init(alloc: std.mem.Allocator, opts: struct { verbose: bool = false, printStackTraceOnFail: bool = true, printColor: bool = true }) TestContext {
         return .{
-            .failures = .{},
+            .failures = .empty,
             .alloc = alloc,
             .verbose = opts.verbose,
             .printStackTraceOnFail = opts.printStackTraceOnFail,
@@ -54,10 +54,7 @@ pub const TestContext = struct {
     }
 
     fn formatOwnedSliceMessage(alloc: std.mem.Allocator, comptime fmt: []const u8, params: anytype) ![]const u8 {
-        var msgBuilder: StringBuilder = .{};
-        defer msgBuilder.deinit(alloc);
-        try msgBuilder.writer(alloc).print(fmt, params);
-        return msgBuilder.toOwnedSlice(alloc);
+        return std.fmt.allocPrint(alloc, fmt, params);
     }
 
     fn handleTestError(self: *TestContext, comptime fmt: []const u8, params: anytype) !void {

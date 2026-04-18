@@ -8,6 +8,6 @@ const DiscoveredTests = testz.discoverTests(.{
     testz.Group{ .name = "Output Tests", .tag = "output", .mod = @import("./output_tests.zig") },
 }, .{});
 
-pub fn main() !void {
-    try testz.testzRunner(DiscoveredTests);
+pub fn main(init: std.process.Init) !void {
+    try testz.testzRunner(DiscoveredTests, init.minimal.args);
 }

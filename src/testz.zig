@@ -73,7 +73,7 @@ pub fn pushTestContext(context: *TestContext, opts: struct { alloc: ?std.mem.All
     }
 
     if (TestContexts == null) {
-        TestContexts = .{}; //std.ArrayList(*TestContext).init(alloc);
+        TestContexts = .empty; //std.ArrayList(*TestContext).init(alloc);
     }
 
     if (GlobalTestContext == null) {
@@ -203,9 +203,9 @@ pub fn getGroupList(tests: []const TestFuncInfo, opts: InfoOpts) ![]TestGroupInf
     var tagToIdx = std.StringHashMap(usize).init(alloc);
     defer tagToIdx.deinit();
 
-    var groupList: std.ArrayList(TestGroupInfo) = .{};
+    var groupList: std.ArrayList(TestGroupInfo) = .empty;
     // testNameBuilders is parallel to groupList; entries are moved into groupList at the end.
-    var testNameBuilders: std.ArrayList(std.ArrayList([]const u8)) = .{};
+    var testNameBuilders: std.ArrayList(std.ArrayList([]const u8)) = .empty;
     defer {
         // Free any builders not yet converted (only reached on error paths).
         for (testNameBuilders.items) |*b| b.deinit(alloc);
@@ -217,7 +217,7 @@ pub fn getGroupList(tests: []const TestFuncInfo, opts: InfoOpts) ![]TestGroupInf
         if (!gop.found_existing) {
             gop.value_ptr.* = groupList.items.len;
             try groupList.append(alloc, .{ .name = t.group.name, .tag = t.group.tag, .tests = &.{} });
-            try testNameBuilders.append(alloc, .{});
+            try testNameBuilders.append(alloc, .empty);
         }
         try testNameBuilders.items[gop.value_ptr.*].append(alloc, t.name);
     }
@@ -244,7 +244,7 @@ fn startsWithSkip(name: []const u8) bool {
 
 fn printCapturedOutput(writer: *Printer, stdout: []const u8, stderr: []const u8, printColor: bool) !void {
     if (stdout.len > 0) {
-        const trimmed = std.mem.trimRight(u8, stdout, "\r\n");
+        const trimmed = std.mem.trimEnd(u8, stdout, "\r\n");
         if (trimmed.len > 0) {
             if (printColor) try writer.print(DarkGray, .{});
             try writer.print("\n  [stdout] ", .{});
@@ -253,7 +253,7 @@ fn printCapturedOutput(writer: *Printer, stdout: []const u8, stderr: []const u8,
         }
     }
     if (stderr.len > 0) {
-        const trimmed = std.mem.trimRight(u8, stderr, "\r\n");
+        const trimmed = std.mem.trimEnd(u8, stderr, "\r\n");
         if (trimmed.len > 0) {
             if (printColor) try writer.print(DarkGray, .{});
             try writer.print("\n  [stderr] ", .{});
@@ -266,7 +266,7 @@ fn printCapturedOutput(writer: *Printer, stdout: []const u8, stderr: []const u8,
 fn printMarkAndTime(
     errorCaught: bool,
     testsPassed: *u32,
-    testStartTime: std.time.Instant,
+    testStartTime: std.Io.Timestamp,
     writer: *Printer,
     printColor: bool,
     opts: RunTestOpts,
@@ -286,8 +286,8 @@ fn printMarkAndTime(
         if (printColor) try writer.print(Reset, .{});
     }
 
-    const testEndTime = try std.time.Instant.now();
-    const testAmountNs = testEndTime.since(testStartTime);
+    const testEndTime = std.Io.Timestamp.now(std.Io.Threaded.global_single_threaded.io(), .awake);
+    const testAmountNs: u64 = @intCast(testStartTime.durationTo(testEndTime).nanoseconds);
 
     if (opts.verbose) {
         try printTestTime(writer, testAmountNs, .{
@@ -357,7 +357,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             try filters.put(filt, true);
         }
 
-        var tempList: std.ArrayList(TestFuncInfo) = .{};
+        var tempList: std.ArrayList(TestFuncInfo) = .empty;
         for (tests) |t| {
             var added: bool = false;
             if (filters.contains(t.group.tag)) {
@@ -438,7 +438,7 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
 
         // Run each of the tests for the group.
         for (group.tests.items) |f| {
-            const testStartTime = try std.time.Instant.now();
+            const testStartTime = std.Io.Timestamp.now(std.Io.Threaded.global_single_threaded.io(), .awake);
 
             testsRun += 1;
 
@@ -622,19 +622,62 @@ const GroupTagStyle: Style = .{ .fg = Color.BrightYellow, .bg = Color.Reset, .mo
 /// A default test runner implementation that parses the command line for options and runs the passed in tests.
 /// It allows for verbose/non-verbose output, disabling printing stack traces and providing a list of
 /// filter tags to only run some tests.
-pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
-    var parser = try zargs.ArgParser.init(std.heap.page_allocator, .{ .name = "Unit tests", .description = "Unit tests....", .opts = &[_]Option{
-        Option{ .longName = "verbose", .shortName = "v", .description = "Verbose output", .maxNumParams = 0 },
-        Option{ .longName = "stack_trace", .shortName = "s", .description = "Print stack traces on errors", .maxNumParams = 0, .default = zargs.DefaultValue.set() },
-        Option{ .longName = "groups", .shortName = "g", .description = "Lists the groups of tests", .maxNumParams = 0 },
-        Option{ .longName = "color", .description = "Forces color output", .maxNumParams = 0, .default = zargs.DefaultValue.set() },
-        Option{ .longName = "capture", .shortName = "c", .description = "Capture stdout/stderr per test; show on failure", .maxNumParams = 0, .default = zargs.DefaultValue.set() },
-        Option{ .longName = "print-output", .shortName = "p", .description = "Print all captured output inline, not just on failures", .maxNumParams = 0 },
-        Option{ .longName = "help", .shortName = "h", .description = "Prints out the help text." },
-    } });
+pub fn testzRunner(testsToRun: []const TestFuncInfo, process_args: std.process.Args) !void {
+    var parser = try zargs.ArgParser.init(
+        std.heap.page_allocator,
+        .{
+            .name = "Unit tests",
+            .description = "Unit tests....",
+            .opts = &[_]Option{
+                Option{
+                    .longName = "verbose",
+                    .shortName = "v",
+                    .description = "Verbose output",
+                    .maxNumParams = 0,
+                },
+                Option{
+                    .longName = "stack_trace",
+                    .shortName = "s",
+                    .description = "Print stack traces on errors",
+                    .maxNumParams = 0,
+                    .default = zargs.DefaultValue.set(),
+                },
+                Option{
+                    .longName = "groups",
+                    .shortName = "g",
+                    .description = "Lists the groups of tests",
+                    .maxNumParams = 0,
+                },
+                Option{
+                    .longName = "color",
+                    .description = "Forces color output",
+                    .maxNumParams = 0,
+                    .default = zargs.DefaultValue.set(),
+                },
+                Option{
+                    .longName = "capture",
+                    .shortName = "c",
+                    .description = "Capture stdout/stderr per test; show on failure",
+                    .maxNumParams = 0,
+                    .default = zargs.DefaultValue.set(),
+                },
+                Option{
+                    .longName = "print-output",
+                    .shortName = "p",
+                    .description = "Print all captured output inline, not just on failures",
+                    .maxNumParams = 0,
+                },
+                Option{
+                    .longName = "help",
+                    .shortName = "h",
+                    .description = "Prints out the help text.",
+                },
+            },
+        },
+    );
     defer parser.deinit();
 
-    var args = parser.parse() catch |err| {
+    var args = parser.parse(process_args) catch |err| {
         std.debug.print("Error parsing args: {any}\n", .{err});
         return;
     };
@@ -642,16 +685,19 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo) !void {
 
     const optPrintColor: ?bool = args.hasOption("color");
 
-    const orig_windows_cp = if (builtin.os.tag == .windows) std.os.windows.kernel32.GetConsoleOutputCP() else 0;
+    const windows_cp = if (builtin.os.tag == .windows) struct {
+        extern "kernel32" fn GetConsoleOutputCP() callconv(.winapi) std.os.windows.UINT;
+        extern "kernel32" fn SetConsoleOutputCP(wCodePageID: std.os.windows.UINT) callconv(.winapi) std.os.windows.BOOL;
+    } else struct {};
+    const orig_windows_cp = if (builtin.os.tag == .windows) windows_cp.GetConsoleOutputCP() else 0;
     defer {
-        if (builtin.os.tag == .windows) _ = std.os.windows.kernel32.SetConsoleOutputCP(orig_windows_cp);
+        if (builtin.os.tag == .windows) _ = windows_cp.SetConsoleOutputCP(orig_windows_cp);
     }
 
     // Set the code page to UTF-8 on Windows so we can print unicode characters.  The code
     // above restores the original code page on exit.
     if (builtin.os.tag == .windows) {
-        const kernel32 = std.os.windows.kernel32;
-        _ = kernel32.SetConsoleOutputCP(65001); // UTF-8 code page
+        _ = windows_cp.SetConsoleOutputCP(65001); // UTF-8 code page
     }
 
     var printer = try Printer.stdout(std.heap.page_allocator);

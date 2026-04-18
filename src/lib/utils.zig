@@ -3,8 +3,8 @@ const std = @import("std");
 const StrArrayList = std.ArrayList([]const u8);
 
 pub fn tokenizeShellString(alloc: std.mem.Allocator, input: []const u8) ![][]const u8 {
-    var tokens = StrArrayList.init(alloc);
-    defer tokens.deinit();
+    var tokens: StrArrayList = .empty;
+    defer tokens.deinit(alloc);
 
     var in_single_quote = false;
     var in_double_quote = false;
@@ -15,7 +15,7 @@ pub fn tokenizeShellString(alloc: std.mem.Allocator, input: []const u8) ![][]con
         switch (input[i]) {
             '\'' => {
                 if (in_single_quote) {
-                    try tokens.append(input[start..i]);
+                    try tokens.append(alloc, input[start..i]);
                 }
 
                 i += 1;
@@ -27,7 +27,7 @@ pub fn tokenizeShellString(alloc: std.mem.Allocator, input: []const u8) ![][]con
             },
             '"' => {
                 if (in_double_quote) {
-                    try tokens.append(input[start..i]);
+                    try tokens.append(alloc, input[start..i]);
                 }
 
                 i += 1;
@@ -40,7 +40,7 @@ pub fn tokenizeShellString(alloc: std.mem.Allocator, input: []const u8) ![][]con
             ' ' => {
                 if (!in_single_quote and !in_double_quote) {
                     if (i != start) { // Avoid empty tokens
-                        try tokens.append(input[start..i]);
+                        try tokens.append(alloc, input[start..i]);
                     }
                     start = i + 1; // Update start to after the space
                 }
@@ -52,10 +52,10 @@ pub fn tokenizeShellString(alloc: std.mem.Allocator, input: []const u8) ![][]con
 
     // Append the last token if there's any leftovers not followed by a space
     if (i != start) {
-        try tokens.append(input[start..i]);
+        try tokens.append(alloc, input[start..i]);
     }
 
-    return tokens.toOwnedSlice();
+    return tokens.toOwnedSlice(alloc);
 }
 
 pub fn cStrToSlice(c_str: [*:0]const u8) []const u8 {

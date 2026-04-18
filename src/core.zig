@@ -50,7 +50,7 @@ pub const TestFuncGroup = struct {
     alloc: std.mem.Allocator,
 
     pub fn init(name: []const u8, alloc: std.mem.Allocator) TestFuncGroup {
-        return .{ .name = name, .tests = .{}, .alloc = alloc };
+        return .{ .name = name, .tests = .empty, .alloc = alloc };
     }
 
     pub fn deinit(self: *TestFuncGroup) void {

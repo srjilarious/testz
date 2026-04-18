@@ -2,8 +2,8 @@
 ![Testz Logo](images/testz.png)
 
 
-![Version Badge](https://img.shields.io/badge/Version-1.1.0-brightgreen)
-![Zig Version Badge](https://img.shields.io/badge/Zig%20Version-0.15.1-%23f7a41d?logo=zig)
+![Version Badge](https://img.shields.io/badge/Version-1.2.0-brightgreen)
+![Zig Version Badge](https://img.shields.io/badge/Zig%20Version-0.16.0-%23f7a41d?logo=zig)
 ![License Badge](https://img.shields.io/badge/License-MIT-blue)
 
 # Overview
@@ -102,8 +102,8 @@ const DiscoveredTests = testz.discoverTests(.{
     testz.Group{ .name = "Misc Tests",   .tag = "misc",   .mod = @import("./misc_tests.zig") },
 }, .{});
 
-pub fn main() !void {
-    try testz.testzRunner(DiscoveredTests);
+pub fn main(init: std.process.Init) !void {
+    try testz.testzRunner(DiscoveredTests, init.minimal.args);
 }
 ```
 

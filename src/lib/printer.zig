@@ -105,19 +105,23 @@ pub const Style = struct {
 
 const FilePrinterData = struct {
     alloc: std.mem.Allocator,
-    file: std.fs.File,
+    file: std.Io.File,
     buffer: []u8,
     colorOutput: bool,
-    writer: std.fs.File.Writer,
+    writer: std.Io.File.Writer,
 
-    pub fn init(alloc: std.mem.Allocator, file: std.fs.File) !FilePrinterData {
+    pub fn init(alloc: std.mem.Allocator, file: std.Io.File) !FilePrinterData {
+        const io = std.Io.Threaded.global_single_threaded.io();
         const buffer = alloc.alloc(u8, 4096) catch return error.OutOfMemory;
+        file.enableAnsiEscapeCodes(io) catch {};
+        const colorOutput = (file.supportsAnsiEscapeCodes(io) catch false) and
+            (file.isTty(io) catch false);
         return .{
             .alloc = alloc,
             .file = file,
             .buffer = buffer,
-            .colorOutput = file.getOrEnableAnsiEscapeSupport() and file.isTty(),
-            .writer = file.writer(buffer),
+            .colorOutput = colorOutput,
+            .writer = file.writer(io, buffer),
         };
     }
 
@@ -127,7 +131,7 @@ const FilePrinterData = struct {
 };
 
 const ArrayPrinterData = struct {
-    writer: std.io.Writer.Allocating,
+    writer: std.Io.Writer.Allocating,
     alloc: std.mem.Allocator,
 };
 
@@ -139,7 +143,7 @@ pub const Printer = union(enum) {
 
     pub fn stdout(alloc: std.mem.Allocator) !Printer {
         const f = try alloc.create(FilePrinterData);
-        f.* = FilePrinterData.init(alloc, std.fs.File.stdout()) catch {
+        f.* = FilePrinterData.init(alloc, std.Io.File.stdout()) catch {
             alloc.destroy(f);
             return error.OutOfMemory;
         };
@@ -149,7 +153,7 @@ pub const Printer = union(enum) {
 
     pub fn memory(alloc: std.mem.Allocator) !Printer {
         const a = try alloc.create(ArrayPrinterData);
-        a.* = .{ .alloc = alloc, .writer = std.io.Writer.Allocating.init(alloc) };
+        a.* = .{ .alloc = alloc, .writer = std.Io.Writer.Allocating.init(alloc) };
         return .{ .array = a };
     }
 
@@ -178,7 +182,7 @@ pub const Printer = union(enum) {
             .file => |f| {
                 try f.writer.interface.print(format, args);
             },
-            ._debug => |_| std.debug.print(format, args),
+            ._debug => std.debug.print(format, args),
         }
     }
 
@@ -192,7 +196,7 @@ pub const Printer = union(enum) {
 
     pub fn flush(self: *const Printer) anyerror!void {
         switch (self.*) {
-            .array => |_| {},
+            .array => {},
             .file => |f| try f.writer.interface.flush(),
             ._debug => {},
         }
@@ -201,7 +205,7 @@ pub const Printer = union(enum) {
     pub fn supportsColor(self: *const Printer) bool {
         return switch (self.*) {
             .file => |f| f.colorOutput,
-            ._debug => |_| std.fs.File.stdout().supportsAnsiEscapeCodes(),
+            ._debug => std.Io.File.stdout().supportsAnsiEscapeCodes(std.Io.Threaded.global_single_threaded.io()) catch false,
             else => {
                 return false;
             },

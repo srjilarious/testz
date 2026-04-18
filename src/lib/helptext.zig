@@ -104,7 +104,7 @@ pub const HelpFormatter = struct
 
             if(!groups.contains(groupName)) {
                 var group = try alloc.create(CommandGroup);
-                group.* = CommandGroup{};
+                group.* = .empty;
 
                 try group.append(alloc, cmd);
                 try groups.put(groupName, group);

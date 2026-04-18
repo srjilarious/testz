@@ -21,7 +21,15 @@ const LocalExampleTests = struct {
     }
 
     pub fn gonnaFailTest() !void {
+        try jumpingPoint();
+    }
+
+    fn jumpingPoint() !void {
         std.log.debug("Testing output capture.", .{});
+        try actualError();
+    }
+
+    fn actualError() !void {
         try testz.expectEqual(add(1, 2), 12);
     }
 
@@ -35,6 +43,6 @@ const Tests = testz.discoverTests(.{
     testz.Group{ .name = "Example tests", .tag = "example", .mod = LocalExampleTests },
 }, .{});
 
-pub fn main() !void {
-    try testz.testzRunner(Tests);
+pub fn main(init: std.process.Init) !void {
+    try testz.testzRunner(Tests, init.minimal.args);
 }

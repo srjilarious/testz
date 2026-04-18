@@ -1,10 +1,11 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-// POSIX pipe/dup/dup2 is available on Linux, macOS, and other POSIX-like systems.
+// POSIX pipe/dup/dup2 is available on Linux and other POSIX-like systems.
 // Windows requires a different approach (CreatePipe + SetStdHandle) — not yet implemented.
+// Note: std.posix.pipe/dup/dup2/close were removed in Zig 0.16; use std.os.linux directly.
 const is_posix = switch (builtin.os.tag) {
-    .linux, .macos, .ios, .tvos, .watchos, .freebsd, .openbsd, .netbsd, .dragonfly, .solaris, .illumos, .haiku => true,
+    .linux => true,
     else => false,
 };
 
@@ -45,37 +46,58 @@ pub const OutputCapture = if (is_posix) struct {
     stderr_read: std.posix.fd_t,
 
     const Self = @This();
+    const linux = std.os.linux;
+
+    fn sysPipe() ![2]std.posix.fd_t {
+        var fds: [2]i32 = undefined;
+        const rc = linux.pipe(&fds);
+        if (linux.errno(rc) != .SUCCESS) return error.Unexpected;
+        return .{ @intCast(fds[0]), @intCast(fds[1]) };
+    }
+
+    fn sysDup(fd: std.posix.fd_t) !std.posix.fd_t {
+        const rc = linux.dup(@intCast(fd));
+        if (linux.errno(rc) != .SUCCESS) return error.Unexpected;
+        return @intCast(rc);
+    }
+
+    fn sysDup2(old: std.posix.fd_t, new: std.posix.fd_t) !void {
+        const rc = linux.dup2(@intCast(old), @intCast(new));
+        if (linux.errno(rc) != .SUCCESS) return error.Unexpected;
+    }
+
+    fn sysClose(fd: std.posix.fd_t) void {
+        _ = linux.close(@intCast(fd));
+    }
 
     pub fn begin() !Self {
-        const posix = std.posix;
-
-        const stdout_pipe = try posix.pipe();
+        const stdout_pipe = try sysPipe();
         errdefer {
-            posix.close(stdout_pipe[0]);
-            posix.close(stdout_pipe[1]);
+            sysClose(stdout_pipe[0]);
+            sysClose(stdout_pipe[1]);
         }
 
-        const stderr_pipe = try posix.pipe();
+        const stderr_pipe = try sysPipe();
         errdefer {
-            posix.close(stderr_pipe[0]);
-            posix.close(stderr_pipe[1]);
+            sysClose(stderr_pipe[0]);
+            sysClose(stderr_pipe[1]);
         }
 
-        const saved_stdout = try posix.dup(posix.STDOUT_FILENO);
-        errdefer posix.close(saved_stdout);
+        const saved_stdout = try sysDup(std.posix.STDOUT_FILENO);
+        errdefer sysClose(saved_stdout);
 
-        const saved_stderr = try posix.dup(posix.STDERR_FILENO);
-        errdefer posix.close(saved_stderr);
+        const saved_stderr = try sysDup(std.posix.STDERR_FILENO);
+        errdefer sysClose(saved_stderr);
 
         // Redirect fd 1 → stdout pipe write end, fd 2 → stderr pipe write end.
-        try posix.dup2(stdout_pipe[1], posix.STDOUT_FILENO);
-        errdefer posix.dup2(saved_stdout, posix.STDOUT_FILENO) catch {};
+        try sysDup2(stdout_pipe[1], std.posix.STDOUT_FILENO);
+        errdefer sysDup2(saved_stdout, std.posix.STDOUT_FILENO) catch {};
 
-        try posix.dup2(stderr_pipe[1], posix.STDERR_FILENO);
+        try sysDup2(stderr_pipe[1], std.posix.STDERR_FILENO);
 
         // Close the original write-end fds; fd 1/2 now point to them via dup2.
-        posix.close(stdout_pipe[1]);
-        posix.close(stderr_pipe[1]);
+        sysClose(stdout_pipe[1]);
+        sysClose(stderr_pipe[1]);
 
         return .{
             .saved_stdout = saved_stdout,
@@ -86,18 +108,16 @@ pub const OutputCapture = if (is_posix) struct {
     }
 
     pub fn end(self: *Self, alloc: std.mem.Allocator) !CapturedOutput {
-        const posix = std.posix;
-
         // Always close the read ends when we return, even on error.
-        defer posix.close(self.stdout_read);
-        defer posix.close(self.stderr_read);
+        defer sysClose(self.stdout_read);
+        defer sysClose(self.stderr_read);
 
         // Restoring fd 1/2 implicitly closes the pipe write ends that dup2
         // placed there, signalling EOF to the read ends.
-        try posix.dup2(self.saved_stdout, posix.STDOUT_FILENO);
-        try posix.dup2(self.saved_stderr, posix.STDERR_FILENO);
-        posix.close(self.saved_stdout);
-        posix.close(self.saved_stderr);
+        try sysDup2(self.saved_stdout, std.posix.STDOUT_FILENO);
+        try sysDup2(self.saved_stderr, std.posix.STDERR_FILENO);
+        sysClose(self.saved_stdout);
+        sysClose(self.saved_stderr);
 
         const stdout_data = try drainPipe(self.stdout_read, alloc);
         errdefer alloc.free(stdout_data);
@@ -112,7 +132,7 @@ pub const OutputCapture = if (is_posix) struct {
     }
 
     fn drainPipe(fd: std.posix.fd_t, alloc: std.mem.Allocator) ![]u8 {
-        var list: std.ArrayListUnmanaged(u8) = .{};
+        var list: std.ArrayListUnmanaged(u8) = .empty;
         errdefer list.deinit(alloc);
         var buf: [4096]u8 = undefined;
         while (true) {

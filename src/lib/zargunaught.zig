@@ -120,7 +120,7 @@ pub const OptionResult = struct {
     pub fn init(name: []const u8) OptionResult {
         return .{
             .name = name,
-            .values = .{},
+            .values = .empty,
             .numOccurences = 0,
         };
     }
@@ -141,7 +141,7 @@ pub const OptionList = struct {
     alloc: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) OptionList {
-        return OptionList{ .data = .{}, .alloc = allocator };
+        return OptionList{ .data = .empty, .alloc = allocator };
     }
 
     pub fn deinit(self: *OptionList) void {
@@ -211,7 +211,7 @@ pub const CommandList = struct {
     alloc: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) CommandList {
-        return CommandList{ .data = .{}, .alloc = allocator };
+        return CommandList{ .data = .empty, .alloc = allocator };
     }
 
     pub fn deinit(self: *CommandList) void {
@@ -502,19 +502,15 @@ pub const ArgParser = struct {
         return;
     }
 
-    pub fn parse(self: *ArgParser) !ArgParserResult {
-        var arr: std.ArrayList([]const u8) = .{};
+    pub fn parse(self: *ArgParser, args: std.process.Args) !ArgParserResult {
+        var arr: std.ArrayList([]const u8) = .empty;
         defer arr.deinit(self.alloc);
 
-        var args = try std.process.argsWithAllocator(self.alloc);
-        _ = args.next(); // Skip the program name.
-        defer args.deinit();
-        while (true) {
-            const curr = args.next();
-            if (curr == null) break;
-
-            const argSlice = utils.cStrToSlice(curr.?);
-            try arr.append(self.alloc, argSlice);
+        var iter = try args.iterateAllocator(self.alloc);
+        _ = iter.next(); // Skip the program name.
+        defer iter.deinit();
+        while (iter.next()) |curr| {
+            try arr.append(self.alloc, curr);
         }
 
         return self.parseArray(arr.items);
@@ -550,7 +546,7 @@ pub const ArgParser = struct {
 
         try availableOpts.addOptions(self.options.data.items);
 
-        var unsetOptions: std.ArrayList([]const u8) = .{};
+        var unsetOptions: std.ArrayList([]const u8) = .empty;
         defer unsetOptions.deinit(self.alloc);
 
         if (parseText.len > 0) {
@@ -652,9 +648,9 @@ pub const ArgParserResult = struct {
         return .{
             .alloc = allocator,
             .currItemPos = 0,
-            .options = .{},
+            .options = .empty,
             .command = null,
-            .positional = .{},
+            .positional = .empty,
         };
     }
 
