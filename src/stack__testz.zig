@@ -8,6 +8,8 @@ const builtin = @import("builtin");
 const core = @import("./core.zig");
 const TestFailure = core.TestFailure;
 
+const highlight_ansi = @import("highlight_ansi");
+
 const White = "\x1b[97m";
 const Green = "\x1b[32m";
 const Bold = "\x1b[1m";
@@ -39,10 +41,16 @@ fn printSourceContext(alloc: std.mem.Allocator, io: std.Io, w: *std.Io.Writer, l
     const contents = file_reader.interface.allocRemaining(alloc, .unlimited) catch return;
     defer alloc.free(contents);
 
+    // Highlight with ANSI codes when color is enabled; fall back to plain text.
+    // `highlighted` is null on error or when color is off, so we never double-free `contents`.
+    const highlighted = if (printColor) highlight_ansi.highlightZigAnsi(alloc, contents) catch null else null;
+    defer if (highlighted) |h| alloc.free(h);
+    const display_contents = highlighted orelse contents;
+
     // Split into lines (without the trailing \n).
     var lines: std.ArrayList([]const u8) = .empty;
     defer lines.deinit(alloc);
-    var it = std.mem.splitScalar(u8, contents, '\n');
+    var it = std.mem.splitScalar(u8, display_contents, '\n');
     while (it.next()) |line| {
         lines.append(alloc, line) catch return;
     }
