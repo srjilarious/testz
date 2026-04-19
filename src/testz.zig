@@ -483,15 +483,38 @@ pub fn runTests(tests: []const TestFuncInfo, opts: RunTestOpts) !bool {
             }
 
             var errorCaught = false;
-            f.func() catch {
-
-                // Print an `X` on test failure.
-                if (printColor) try writer.print(Red, .{});
-                try writer.print("X", .{});
-                if (printColor) try writer.print(Reset, .{});
-                errorCaught = true;
-                testsFailed += 1;
-            };
+            switch (f.func) {
+                .basic => |basicFn| basicFn() catch {
+                    if (printColor) try writer.print(Red, .{});
+                    try writer.print("X", .{});
+                    if (printColor) try writer.print(Reset, .{});
+                    errorCaught = true;
+                    testsFailed += 1;
+                },
+                .full => |fullFn| {
+                    var dAlloc = std.heap.DebugAllocator(.{}){};
+                    const testAlloc = dAlloc.allocator();
+                    const testIo = std.Io.Threaded.global_single_threaded.io();
+                    fullFn(testIo, testAlloc) catch {
+                        if (printColor) try writer.print(Red, .{});
+                        try writer.print("X", .{});
+                        if (printColor) try writer.print(Reset, .{});
+                        errorCaught = true;
+                        testsFailed += 1;
+                    };
+                    const leakCheck = dAlloc.deinit();
+                    if (!errorCaught and leakCheck == .leak) {
+                        var leakFailure = try core.TestFailure.init(testPrintName, alloc);
+                        leakFailure.errorMessage = try alloc.dupe(u8, "Memory leak detected");
+                        try GlobalTestContext.?.failures.append(alloc, leakFailure);
+                        if (printColor) try writer.print(Red, .{});
+                        try writer.print("X", .{});
+                        if (printColor) try writer.print(Reset, .{});
+                        errorCaught = true;
+                        testsFailed += 1;
+                    }
+                },
+            }
 
             // End capture and route output to the right place.
             if (opts.captureOutput) {

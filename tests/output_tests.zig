@@ -25,7 +25,7 @@ pub fn verbosePassingTest() !void {
     ;
 
     try runInternal(.{
-        .func = verbosePassingInternal,
+        .func = .{ .basic = verbosePassingInternal },
         .name = "verbosePassing",
         .group = .{ .name = "Default", .tag = "default" },
     }, expected, .{ .verbose = true });
@@ -50,7 +50,7 @@ pub fn verboseFailingTest() !void {
     ;
 
     try runInternal(.{
-        .func = verboseFailingInternal,
+        .func = .{ .basic = verboseFailingInternal },
         .name = "verboseFailing",
         .group = .{ .name = "Default", .tag = "default" },
     }, expected, .{ .verbose = true });
@@ -74,7 +74,7 @@ pub fn verboseSkipTest() !void {
     ;
 
     try runInternal(.{
-        .func = skip_verboseSkipInternal,
+        .func = .{ .basic = skip_verboseSkipInternal },
         .name = "skip_verboseSkip",
         .group = .{ .name = "Default", .tag = "default" },
     }, expected, .{ .verbose = true });
@@ -93,8 +93,8 @@ fn filterBetaFailFn() !void {
 // and the summary shows only 1 Total Test (not 2).
 pub fn filteredByTagTest() !void {
     const tests = &[_]TestFuncInfo{
-        .{ .func = filterAlphaPassFn, .name = "alphaPass", .group = .{ .name = "Alpha", .tag = "alpha" } },
-        .{ .func = filterBetaFailFn, .name = "betaFail", .group = .{ .name = "Beta", .tag = "beta" } },
+        .{ .func = .{ .basic = filterAlphaPassFn }, .name = "alphaPass", .group = .{ .name = "Alpha", .tag = "alpha" } },
+        .{ .func = .{ .basic = filterBetaFailFn }, .name = "betaFail", .group = .{ .name = "Beta", .tag = "beta" } },
     };
     const filters = &[_][]const u8{"alpha"};
     const expected: []const u8 =
@@ -113,8 +113,8 @@ pub fn filteredByTagTest() !void {
 // verboseLength = len("alphaPass") = 9, dashes = 9 + 22 = 31
 pub fn verboseFilteredByTagTest() !void {
     const tests = &[_]TestFuncInfo{
-        .{ .func = filterAlphaPassFn, .name = "alphaPass", .group = .{ .name = "Alpha", .tag = "alpha" } },
-        .{ .func = filterBetaFailFn, .name = "betaFail", .group = .{ .name = "Beta", .tag = "beta" } },
+        .{ .func = .{ .basic = filterAlphaPassFn }, .name = "alphaPass", .group = .{ .name = "Alpha", .tag = "alpha" } },
+        .{ .func = .{ .basic = filterBetaFailFn }, .name = "betaFail", .group = .{ .name = "Beta", .tag = "beta" } },
     };
     const filters = &[_][]const u8{"alpha"};
     const expected: []const u8 =
@@ -137,8 +137,8 @@ pub fn verboseFilteredByTagTest() !void {
 // Edge case: filter matches nothing — all tests excluded, counts are all zero.
 pub fn filteredEmptyResultTest() !void {
     const tests = &[_]TestFuncInfo{
-        .{ .func = filterAlphaPassFn, .name = "alphaPass", .group = .{ .name = "Alpha", .tag = "alpha" } },
-        .{ .func = filterBetaFailFn, .name = "betaFail", .group = .{ .name = "Beta", .tag = "beta" } },
+        .{ .func = .{ .basic = filterAlphaPassFn }, .name = "alphaPass", .group = .{ .name = "Alpha", .tag = "alpha" } },
+        .{ .func = .{ .basic = filterBetaFailFn }, .name = "betaFail", .group = .{ .name = "Beta", .tag = "beta" } },
     };
     const filters = &[_][]const u8{"nonexistent"};
     const expected: []const u8 =

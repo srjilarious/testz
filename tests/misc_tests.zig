@@ -20,7 +20,7 @@ pub fn allowNonTestzErrors() !void {
     ;
 
     try runInternal(.{
-        .func = allowNonTestzErrorsInternal,
+        .func = .{ .basic = allowNonTestzErrorsInternal },
         .name = "allowNonTestzErrors",
         .group = .{ .name = "Default", .tag = "default" },
     }, expected, .{});
@@ -42,7 +42,7 @@ pub fn alwaysFailTest() !void {
     ;
 
     try runInternal(.{
-        .func = alwaysFailTestInternal,
+        .func = .{ .basic = alwaysFailTestInternal },
         .name = "alwaysFailTest",
         .group = .{ .name = "Default", .tag = "default" },
     }, expected, .{});
@@ -68,7 +68,7 @@ pub fn successTest() !void {
     ;
 
     try runInternal(.{
-        .func = successTestInternal,
+        .func = .{ .basic = successTestInternal },
         .name = "successTest",
         .group = .{ .name = "Default", .tag = "default" },
     }, expected, .{});
@@ -89,7 +89,7 @@ pub fn testSkipNotReady() !void {
     ;
 
     try runInternal(.{
-        .func = skip_notReadyTestInternal,
+        .func = .{ .basic = skip_notReadyTestInternal },
         .name = "skip_notReadyTest",
         .group = .{ .name = "Default", .tag = "default" },
         .skip = true,

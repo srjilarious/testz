@@ -2,7 +2,13 @@ const std = @import("std");
 
 pub const StringBuilder = std.ArrayList(u8);
 
-pub const TestFunc = *const fn () anyerror!void;
+pub const TestFuncBasic = *const fn () anyerror!void;
+pub const TestFuncFull = *const fn (std.Io, std.mem.Allocator) anyerror!void;
+
+pub const TestFunc = union(enum) {
+    basic: TestFuncBasic,
+    full: TestFuncFull,
+};
 
 pub const TestFuncInfo = struct {
     func: TestFunc,

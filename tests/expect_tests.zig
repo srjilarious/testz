@@ -22,7 +22,7 @@ pub fn expectEqualFailTest() !void {
     ;
 
     try runInternal(.{
-        .func = expectEqualFailTestInternal,
+        .func = .{ .basic = expectEqualFailTestInternal },
         .name = "expectEqualFailTest",
         .group = .{ .name = "Default", .tag = "default" },
     }, expected, .{});
@@ -44,7 +44,7 @@ pub fn expectNotEqualFailTest() !void {
     ;
 
     try runInternal(.{
-        .func = expectNotEqualFailTestInternal,
+        .func = .{ .basic = expectNotEqualFailTestInternal },
         .name = "expectNotEqualFailTest",
         .group = .{ .name = "Default", .tag = "default" },
     }, expected, .{});
@@ -66,7 +66,7 @@ pub fn expectEqualStrFailTest() !void {
     ;
 
     try runInternal(.{
-        .func = expectEqualStrFailTestInternal,
+        .func = .{ .basic = expectEqualStrFailTestInternal },
         .name = "expectEqualStrFailTest",
         .group = .{ .name = "Default", .tag = "default" },
     }, expected, .{});
@@ -88,7 +88,7 @@ pub fn expectEqualStrFailFirstLongerTest() !void {
     ;
 
     try runInternal(.{
-        .func = expectEqualStrFailFirstLongerTestInternal,
+        .func = .{ .basic = expectEqualStrFailFirstLongerTestInternal },
         .name = "expectEqualStrFailFirstLongerTest",
         .group = .{ .name = "Default", .tag = "default" },
     }, expected, .{});
@@ -110,7 +110,7 @@ pub fn expectNotEqualStrFailTest() !void {
     ;
 
     try runInternal(.{
-        .func = expectNotEqualStrFailTestInternal,
+        .func = .{ .basic = expectNotEqualStrFailTestInternal },
         .name = "expectNotEqualStrFailTest",
         .group = .{ .name = "Default", .tag = "default" },
     }, expected, .{});
@@ -132,7 +132,7 @@ pub fn expectTrueFailTest() !void {
     ;
 
     try runInternal(.{
-        .func = expectTrueFailTestInternal,
+        .func = .{ .basic = expectTrueFailTestInternal },
         .name = "expectTrueFailTest",
         .group = .{ .name = "Default", .tag = "default" },
     }, expected, .{});
@@ -154,7 +154,7 @@ pub fn expectFalseFailTest() !void {
     ;
 
     try runInternal(.{
-        .func = expectFalseFailTestInternal,
+        .func = .{ .basic = expectFalseFailTestInternal },
         .name = "expectFalseFailTest",
         .group = .{ .name = "Default", .tag = "default" },
     }, expected, .{});
@@ -181,7 +181,7 @@ pub fn expectEqualOptionalOkTest() !void {
     ;
 
     try runInternal(.{
-        .func = expectEqualOptionalOkTestInternal,
+        .func = .{ .basic = expectEqualOptionalOkTestInternal },
         .name = "expectEqualOptionalOkTestInternal",
         .group = .{ .name = "Expect", .tag = "expect" },
     }, expected, .{});
@@ -210,7 +210,7 @@ pub fn expectNotEqualOptionalOkTest() !void {
     ;
 
     try runInternal(.{
-        .func = expectNotEqualOptionalOkTestInternal,
+        .func = .{ .basic = expectNotEqualOptionalOkTestInternal },
         .name = "expectEqualOptionalOkTestInternal",
         .group = .{ .name = "Expect", .tag = "expect" },
     }, expected, .{});
@@ -237,7 +237,7 @@ pub fn expectErrorTest() !void {
     ;
 
     try runInternal(.{
-        .func = expectErrorTestInternal,
+        .func = .{ .basic = expectErrorTestInternal },
         .name = "expectErrorTestInternal",
         .group = .{ .name = "Expect", .tag = "expect" },
     }, expected, .{});

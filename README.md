@@ -2,7 +2,7 @@
 ![Testz Logo](images/testz.png)
 
 
-![Version Badge](https://img.shields.io/badge/Version-1.3.0-brightgreen)
+![Version Badge](https://img.shields.io/badge/Version-1.4.0-brightgreen)
 ![Zig Version Badge](https://img.shields.io/badge/Zig%20Version-0.16.0-%23f7a41d?logo=zig)
 ![License Badge](https://img.shields.io/badge/License-MIT-blue)
 
@@ -31,10 +31,12 @@ Testz is a testing library for zig that provides some extra features compared to
 - Stack traces of relevant code only
   - Skips stack frames from `testz` itself as well as `main` where the test runner is called.
   - Stack traces provide context lines around the stack frame.
+  - Uses tree-sitter to add highlighting to zig code
 
 - Per-test stdout/stderr capture, shown alongside failure output so diagnostic prints don't get lost in the overall run.
+    - Note: doesn't work on Windows properly.
 
-Testz runners are just another executable you setup in your `build.zig`, with the library providing a number of helpers to make it as easy as possible to create tests.  Debugging is simple since you can run your debugger just like with any normal flat executable and use the built in filtering to narrow down what test or set of tests gets run.
+Testz runners are just another executable you setup in your `build.zig`, where the library provides a number of helpers to make it as easy as possible to create tests.  Debugging is simple since you can run your debugger just like with any normal flat executable and use the built in filtering to narrow down what test or set of tests gets run.
 
 # Example
 
@@ -73,6 +75,32 @@ pub fn skip_notReadyYet() !void {
 ```
 
 The test functions are simply any public function in a module you pass into `discoverTests`.  The `testz` library has a number of `expectXYZ` functions you can use to make assertions in your code.  If one fails, `testz` will capture the name of the failed test, error message, and stack trace (with contextual lines).
+
+## Test function signatures
+
+Testz discovers two function signatures automatically:
+
+**Basic** — no parameters, the simplest form:
+
+```zig
+pub fn myTest() !void {
+    try testz.expectEqual(1 + 1, 2);
+}
+```
+
+**Full** — receives `std.Io` and `std.mem.Allocator`:
+
+```zig
+pub fn myAllocatingTest(io: std.Io, alloc: std.mem.Allocator) !void {
+    const buf = try alloc.alloc(u8, 64);
+    defer alloc.free(buf);
+    try testz.expectEqual(buf.len, 64);
+}
+```
+
+Full tests are useful when the code under test needs an allocator or I/O.  Testz passes a `DebugAllocator`-backed allocator, so memory leak detection is automatic: if the test body passes but leaks memory, the test is still recorded as a failure.
+
+Both forms are discovered side-by-side in the same module — there is no configuration needed to mix them.
 
 ## Expect / assertion functions
 

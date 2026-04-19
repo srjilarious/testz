@@ -28,6 +28,20 @@ inline fn startsWithSkip(comptime name: []const u8) bool {
     return name.len >= 5 and std.mem.eql(u8, name[0..5], "skip_");
 }
 
+/// Returns true if the function has no parameters (basic test signature).
+inline fn isBasicTestFn(comptime fld: anytype) bool {
+    return @typeInfo(@TypeOf(fld)).@"fn".params.len == 0;
+}
+
+/// Returns true if the function matches the full test signature:
+///   fn (std.Io, std.mem.Allocator) anyerror!void
+inline fn isFullTestFn(comptime fld: anytype) bool {
+    const params = @typeInfo(@TypeOf(fld)).@"fn".params;
+    return params.len == 2 and
+        params[0].type != null and params[0].type.? == std.Io and
+        params[1].type != null and params[1].type.? == std.mem.Allocator;
+}
+
 pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type, opts: DiscoverOpts) []const TestFuncInfo {
     comptime var numTests: usize = 0;
     const decls = @typeInfo(mod).@"struct".decls;
@@ -35,9 +49,7 @@ pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type, 
         const fld = @field(mod, decl.name);
         const ti = @typeInfo(@TypeOf(fld));
         if (ti == .@"fn") {
-            if (opts.testsEndWithTest and std.mem.endsWith(u8, decl.name, "Test")) {
-                numTests += 1;
-            } else {
+            if (isBasicTestFn(fld) or isFullTestFn(fld)) {
                 numTests += 1;
             }
         }
@@ -49,41 +61,29 @@ pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type, 
         const fld = @field(mod, decl.name);
         const ti = @typeInfo(@TypeOf(fld));
         if (ti == .@"fn") {
-            if (opts.debugDiscovery) {
-                @compileLog("Evaluating function:", decl.name);
+            if (isBasicTestFn(fld)) {
+                if (opts.debugDiscovery) {
+                    @compileLog("Discovered basic test:", decl.name);
+                }
+                tests[idx] = .{
+                    .func = .{ .basic = fld },
+                    .name = decl.name,
+                    .skip = false,
+                    .group = groupInfo,
+                };
+                idx += 1;
+            } else if (isFullTestFn(fld)) {
+                if (opts.debugDiscovery) {
+                    @compileLog("Discovered full test:", decl.name);
+                }
+                tests[idx] = .{
+                    .func = .{ .full = fld },
+                    .name = decl.name,
+                    .skip = false,
+                    .group = groupInfo,
+                };
+                idx += 1;
             }
-
-            tests[idx] = .{
-                .func = fld,
-                .name = decl.name,
-                .skip = false,
-                .group = groupInfo,
-            };
-            idx += 1;
-
-            // var isTest: bool = true;
-            // if (opts.testsEndWithTest and !endsWithTest(decl.name)) {
-            //     if (opts.debugDiscovery) {
-            //         @compileLog("Not running {} as a test since its name doesn't end with `Test`", .{decl.name});
-            //     }
-
-            //     isTest = false;
-            // }
-
-            // if (isTest) {
-            //     const skip = startsWithSkip(decl.name);
-            //     if (skip and opts.debugDiscovery) {
-            //         @compileLog("Function {} will be skipped since it starts with `_skip`", .{decl.name});
-            //     }
-
-            //     tests[idx] = .{
-            //         .func = fld,
-            //         .name = decl.name,
-            //         .skip = skip,
-            //         .group = groupInfo,
-            //     };
-            //     idx += 1;
-            // }
         }
     }
 
