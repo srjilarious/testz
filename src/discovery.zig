@@ -30,23 +30,23 @@ inline fn startsWithSkip(comptime name: []const u8) bool {
 
 /// Returns true if the function has no parameters (basic test signature).
 inline fn isBasicTestFn(comptime fld: anytype) bool {
-    return @typeInfo(@TypeOf(fld)).@"fn".params.len == 0;
+    return @typeInfo(@TypeOf(fld)).@"fn".param_types.len == 0;
 }
 
 /// Returns true if the function matches the full test signature:
 ///   fn (std.Io, std.mem.Allocator) anyerror!void
 inline fn isFullTestFn(comptime fld: anytype) bool {
-    const params = @typeInfo(@TypeOf(fld)).@"fn".params;
-    return params.len == 2 and
-        params[0].type != null and params[0].type.? == std.Io and
-        params[1].type != null and params[1].type.? == std.mem.Allocator;
+    const param_types = @typeInfo(@TypeOf(fld)).@"fn".param_types;
+    return param_types.len == 2 and
+        param_types[0] != null and param_types[0].? == std.Io and
+        param_types[1] != null and param_types[1].? == std.mem.Allocator;
 }
 
 pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type, opts: DiscoverOpts) []const TestFuncInfo {
     comptime var numTests: usize = 0;
-    const decls = @typeInfo(mod).@"struct".decls;
-    inline for (decls) |decl| {
-        const fld = @field(mod, decl.name);
+    const decl_names = @typeInfo(mod).@"struct".decl_names;
+    inline for (decl_names) |decl_name| {
+        const fld = @field(mod, decl_name);
         const ti = @typeInfo(@TypeOf(fld));
         if (ti == .@"fn") {
             if (isBasicTestFn(fld) or isFullTestFn(fld)) {
@@ -57,28 +57,28 @@ pub fn discoverTestsInModule(comptime groupInfo: TestGroup, comptime mod: type, 
 
     comptime var tests: [numTests]TestFuncInfo = undefined;
     comptime var idx: usize = 0;
-    inline for (decls) |decl| {
-        const fld = @field(mod, decl.name);
+    inline for (decl_names) |decl_name| {
+        const fld = @field(mod, decl_name);
         const ti = @typeInfo(@TypeOf(fld));
         if (ti == .@"fn") {
             if (isBasicTestFn(fld)) {
                 if (opts.debugDiscovery) {
-                    @compileLog("Discovered basic test:", decl.name);
+                    @compileLog("Discovered basic test:", decl_name);
                 }
                 tests[idx] = .{
                     .func = .{ .basic = fld },
-                    .name = decl.name,
+                    .name = decl_name,
                     .skip = false,
                     .group = groupInfo,
                 };
                 idx += 1;
             } else if (isFullTestFn(fld)) {
                 if (opts.debugDiscovery) {
-                    @compileLog("Discovered full test:", decl.name);
+                    @compileLog("Discovered full test:", decl_name);
                 }
                 tests[idx] = .{
                     .func = .{ .full = fld },
-                    .name = decl.name,
+                    .name = decl_name,
                     .skip = false,
                     .group = groupInfo,
                 };
@@ -115,10 +115,10 @@ pub fn discoverTests(comptime mods: anytype, opts: DiscoverOpts) []const TestFun
         @compileError("expected tuple or struct argument of modules, found " ++ @typeName(ModsType));
     }
 
-    const fields = modsTypeInfo.@"struct".fields;
-    inline for (fields, 0..) |field, i| {
+    const field_names = modsTypeInfo.@"struct".field_names;
+    inline for (field_names, 0..) |field_name, i| {
         _ = i; // You can use i if needed for debugging
-        const currIndexItem = @field(mods, field.name);
+        const currIndexItem = @field(mods, field_name);
 
         if (@TypeOf(currIndexItem) == Group) {
             currGroup = .{
@@ -156,7 +156,7 @@ pub fn discoverTests(comptime mods: anytype, opts: DiscoverOpts) []const TestFun
             };
 
             // We expect a normal struct/module import result in this case.
-            totalTests = addModuleTests(&tests, @field(mods, field.name), currGroup, opts, totalTests);
+            totalTests = addModuleTests(&tests, @field(mods, field_name), currGroup, opts, totalTests);
         }
     }
 
