@@ -12,10 +12,12 @@
     },
     .dependencies = .{
         .tree_sitter = .{
-            .path = "../oss/zig-tree-sitter",
+            .url = "git+https://github.com/srjilarious/zig-tree-sitter#94292e3fb9817b5a023d4dd99c13ed66139031a4",
+            .hash = "tree_sitter-0.26.0-8heIf1jzDACYun1SYfDfljvDEqUHpselif-ozckvjarH",
         },
         .tree_sitter_zig = .{
-            .path = "../oss/tree-sitter-zig",
+            .url = "git+https://github.com/srjilarious/tree-sitter-zig#66e374d518616f18ee9e0ea71b0ec3d120c16e61",
+            .hash = "tree_sitter_zig-1.1.3-C0B1jLd2XACced7oUU76wpfA6DMrYHISwhEJp-7edP2O",
         },
     },
 }
