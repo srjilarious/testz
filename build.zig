@@ -27,7 +27,7 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "testz_main",
-        .root_module = b.addModule("main", .{
+        .root_module = b.createModule(.{
             .root_source_file = b.path("tests/main.zig"),
             .target = target,
             .optimize = optimize,
