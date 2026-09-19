@@ -808,7 +808,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo, process_args: std.process.A
             break :blk args.positional.items;
         } else null);
 
-        _ = try runTests(testsToRun, .{
+        const passed = try runTests(testsToRun, .{
             .verbose = verbose,
             .allowFilters = filters,
             .printStackTraceOnFail = optPrintStackTrace,
@@ -816,5 +816,13 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo, process_args: std.process.A
             .captureOutput = captureOutput,
             .printAllOutput = printAllOutput,
         });
+
+        // Exit non-zero when anything failed, so CI and other callers can
+        // check the test binary's exit code instead of scraping its output.
+        // runTests already flushed its own writer with the summary line.
+        if (!passed) {
+            try printer.flush();
+            std.process.exit(1);
+        }
     }
 }
