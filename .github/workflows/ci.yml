@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned dev build (matches build.zig.zon's minimum_zig_version),
+      # served from our own zig-toolchains releases since nightlies get
+      # pruned from ziglang.org and the community mirrors.
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0-dev.1857+3c46da14d
+          mirror: https://github.com/srjilarious/zig-toolchains/releases/download/0.17.0-dev.1857+3c46da14d
+
+      - name: Build testz
+        run: zig build
+
+      # testz's own suite: checks the runner's output for passing and
+      # failing tests by capturing and comparing it.
+      - name: Run tests
+        run: zig build tests
