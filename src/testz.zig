@@ -25,6 +25,22 @@ const capture_mod = @import("./capture.zig");
 pub const OutputCapture = capture_mod.OutputCapture;
 pub const CapturedOutput = capture_mod.CapturedOutput;
 
+/// Panic handler namespace for test runners.  Output capture redirects
+/// stdout/stderr into pipes while a test runs, so a panic inside a test would
+/// otherwise print its message and stack trace into the pipe and lose it.
+/// Enable it from the test runner's root file:
+///
+///   pub const panic = testz.panic;
+pub const panic = std.debug.FullPanic(panicHandler);
+
+fn panicHandler(msg: []const u8, first_trace_addr: ?usize) noreturn {
+    if (OutputCapture.restoreForPanic()) {
+        // Start the panic message on its own line, after the test's progress mark.
+        std.debug.print("\n", .{});
+    }
+    std.debug.defaultPanic(msg, first_trace_addr orelse @returnAddress());
+}
+
 const DarkGray = "\x1b[90m";
 const Red = "\x1b[91m";
 const DarkGreen = "\x1b[32m";

@@ -48,6 +48,10 @@ pub const OutputCapture = if (is_posix) struct {
     const Self = @This();
     const linux = std.os.linux;
 
+    /// The capture in progress, if any, so a panic handler can put the real
+    /// stdout/stderr back before printing the panic message.
+    var active: ?Self = null;
+
     fn sysPipe() ![2]std.posix.fd_t {
         var fds: [2]i32 = undefined;
         const rc = linux.pipe(&fds);
@@ -99,15 +103,19 @@ pub const OutputCapture = if (is_posix) struct {
         sysClose(stdout_pipe[1]);
         sysClose(stderr_pipe[1]);
 
-        return .{
+        const self: Self = .{
             .saved_stdout = saved_stdout,
             .saved_stderr = saved_stderr,
             .stdout_read = stdout_pipe[0],
             .stderr_read = stderr_pipe[0],
         };
+        active = self;
+        return self;
     }
 
     pub fn end(self: *Self, alloc: std.mem.Allocator) !CapturedOutput {
+        active = null;
+
         // Always close the read ends when we return, even on error.
         defer sysClose(self.stdout_read);
         defer sysClose(self.stderr_read);
@@ -142,6 +150,43 @@ pub const OutputCapture = if (is_posix) struct {
         }
         return list.toOwnedSlice(alloc);
     }
+
+    /// Called from a panic handler: if a capture is in progress, points fd 1/2
+    /// back at the real stdout/stderr and forwards whatever the test wrote so
+    /// far.  Without this the panic message goes into the capture pipe and is
+    /// lost when the process aborts.  Doesn't allocate, since the allocator
+    /// may be what panicked.  Returns true if a capture was in progress.
+    pub fn restoreForPanic() bool {
+        const fds = active orelse return false;
+        active = null;
+
+        // Restoring fd 1/2 closes the pipe write ends, so the drains below
+        // hit EOF instead of blocking.
+        _ = linux.dup2(@intCast(fds.saved_stdout), std.posix.STDOUT_FILENO);
+        _ = linux.dup2(@intCast(fds.saved_stderr), std.posix.STDERR_FILENO);
+
+        forwardPipe(fds.stdout_read, std.posix.STDOUT_FILENO);
+        forwardPipe(fds.stderr_read, std.posix.STDERR_FILENO);
+        return true;
+    }
+
+    fn forwardPipe(read_fd: std.posix.fd_t, out_fd: std.posix.fd_t) void {
+        var buf: [4096]u8 = undefined;
+        while (true) {
+            const rc = linux.read(@intCast(read_fd), &buf, buf.len);
+            if (linux.errno(rc) != .SUCCESS or rc == 0) return;
+            writeAllFd(out_fd, buf[0..rc]);
+        }
+    }
+
+    fn writeAllFd(fd: std.posix.fd_t, bytes: []const u8) void {
+        var rest = bytes;
+        while (rest.len > 0) {
+            const rc = linux.write(@intCast(fd), rest.ptr, rest.len);
+            if (linux.errno(rc) != .SUCCESS or rc == 0) return;
+            rest = rest[rc..];
+        }
+    }
 } else struct {
     const Self = @This();
 
@@ -157,5 +202,9 @@ pub const OutputCapture = if (is_posix) struct {
             .stderr = try alloc.dupe(u8, ""),
             .alloc = alloc,
         };
+    }
+
+    pub fn restoreForPanic() bool {
+        return false;
     }
 };

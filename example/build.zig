@@ -1,4 +1,5 @@
 const std = @import("std");
+const testz = @import("testz");
 
 // Although this function looks imperative, it does not perform the build
 // directly and instead it mutates the build graph (`b`) that will be then
@@ -127,7 +128,14 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const testsExe = b.addExecutable(.{
+    // `addTestExe` wraps our test main in a generated root module that
+    // installs testz's panic handler, so a panic inside a test still prints
+    // its message even while that test's output is being captured.  It also
+    // adds the `testz` import to our module.
+    const testsExe = testz.addTestExe(b, .{
+        .target = target,
+        .optimize = optimize,
+        .testz_dep = testzMod,
         .name = "unit_tests",
         .root_module = b.createModule(.{
             .root_source_file = b.path("tests/unit_tests.zig"),
@@ -135,7 +143,6 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "example", .module = mod },
-                .{ .name = "testz", .module = testzMod.module("testz") },
             },
         }),
     });
