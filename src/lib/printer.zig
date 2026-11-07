@@ -38,6 +38,8 @@ pub const Style = struct {
     mod: TextStyle,
 
     pub fn reset(printer: Printer) !void {
+        // Keep escape codes out of piped or captured output.
+        if (!printer.supportsColor()) return;
         try printer.print("\x1b[0m", .{});
     }
 
@@ -126,6 +128,8 @@ const FilePrinterData = struct {
     }
 
     pub fn deinit(self: *FilePrinterData) void {
+        // So output isn't lost when the caller forgets to flush.
+        self.writer.interface.flush() catch {};
         self.alloc.free(self.buffer);
     }
 };
@@ -142,8 +146,18 @@ pub const Printer = union(enum) {
     _debug: bool,
 
     pub fn stdout(alloc: std.mem.Allocator) !Printer {
+        return toFile(alloc, std.Io.File.stdout());
+    }
+
+    pub fn stderr(alloc: std.mem.Allocator) !Printer {
+        return toFile(alloc, std.Io.File.stderr());
+    }
+
+    /// Prints to `file`, in color when it's a terminal that supports it.
+    /// Call flush (or deinit) to write out what's buffered.
+    pub fn toFile(alloc: std.mem.Allocator, file: std.Io.File) !Printer {
         const f = try alloc.create(FilePrinterData);
-        f.* = FilePrinterData.init(alloc, std.Io.File.stdout()) catch {
+        f.* = FilePrinterData.init(alloc, file) catch {
             alloc.destroy(f);
             return error.OutOfMemory;
         };
@@ -219,49 +233,65 @@ pub const Printer = union(enum) {
         currIndentAmount: usize,
         maxLineLength: usize,
     ) !usize {
-        var start: usize = 0;
-        var currLineLen = startLineLen;
-        var prevWordLoc: usize = 0;
+        var col = startLineLen;
 
-        var idx: usize = 0;
-        while (idx < value.len) {
-            if (value[idx] == ' ') {
-                prevWordLoc = idx;
-            } else if (value[idx] == '\n') {
-                try self.print("{s}", .{value[start..idx]});
-                try self.printNum(" ", currIndentAmount);
-                currLineLen = currIndentAmount;
-                start = idx + 1;
-                idx += 1;
+        // Newlines in `value` start a new indented line; the text between
+        // them is wrapped word by word.
+        var lines = std.mem.splitScalar(u8, value, '\n');
+        var firstLine = true;
+        while (lines.next()) |line| {
+            if (!firstLine) {
+                try self.wrapLine(currIndentAmount);
+                col = currIndentAmount;
             }
+            firstLine = false;
 
-            if ((currLineLen + idx - start) >= maxLineLength) {
-                // hyphenation here.
-                if (start >= prevWordLoc) {
-                    try self.print("{s}-\n", .{value[start .. idx - 1]});
-                    try self.printNum(" ", currIndentAmount);
-                    currLineLen = currIndentAmount;
-                    start = idx - 1;
-                    prevWordLoc = start;
+            var idx: usize = 0;
+            while (idx < line.len) {
+                // The spaces before a word are kept (so "end.  Next" keeps
+                // its two spaces) unless the word moves to a new line.
+                const gapStart = idx;
+                while (idx < line.len and line[idx] == ' ') idx += 1;
+                const gap = idx - gapStart;
+
+                const wordStart = idx;
+                while (idx < line.len and line[idx] != ' ') idx += 1;
+                var word = line[wordStart..idx];
+
+                // Trailing spaces are dropped.
+                if (word.len == 0) break;
+
+                if (col > currIndentAmount and col + gap + word.len > maxLineLength) {
+                    try self.wrapLine(currIndentAmount);
+                    col = currIndentAmount;
+                } else {
+                    try self.printNum(" ", gap);
+                    col += gap;
                 }
-                // word wrap break
-                else {
-                    try self.print("{s}\n", .{value[start..prevWordLoc]});
-                    try self.printNum(" ", currIndentAmount);
-                    currLineLen = currIndentAmount;
-                    start = prevWordLoc + 1;
+
+                // Hyphenate a word too long for a line of its own.  With
+                // less than two columns of room there's nothing useful to
+                // split into, so the word runs past the limit instead.
+                while (col + word.len > maxLineLength) {
+                    const room = maxLineLength -| col;
+                    if (room < 2) break;
+
+                    try self.print("{s}-", .{word[0 .. room - 1]});
+                    try self.wrapLine(currIndentAmount);
+                    col = currIndentAmount;
+                    word = word[room - 1 ..];
                 }
+
+                try self.print("{s}", .{word});
+                col += word.len;
             }
-
-            idx += 1;
         }
 
-        // TODO: add print rest of value in word wrap case.
-        //if((currLineLen + left) >= maxLine)
-        const left: usize = value.len - start;
-        try self.print("{s}", .{value[start .. start + left]});
-        currLineLen += left;
+        return col;
+    }
 
-        return currLineLen;
+    fn wrapLine(self: *Printer, indent: usize) !void {
+        try self.print("\n", .{});
+        try self.printNum(" ", indent);
     }
 };

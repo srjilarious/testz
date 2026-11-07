@@ -662,11 +662,21 @@ const GroupTagStyle: Style = .{ .fg = Color.BrightYellow, .bg = Color.Reset, .mo
 /// It allows for verbose/non-verbose output, disabling printing stack traces and providing a list of
 /// filter tags to only run some tests.
 pub fn testzRunner(testsToRun: []const TestFuncInfo, process_args: std.process.Args) !void {
+    // The help's usage line names the test binary as it was run.
+    var programArgs = try process_args.iterateAllocator(std.heap.page_allocator);
+    defer programArgs.deinit();
+    const programName = try std.heap.page_allocator.dupe(u8, std.fs.path.basename(programArgs.next() orelse "tests"));
+    defer std.heap.page_allocator.free(programName);
+
     var parser = try zargs.ArgParser.init(
         std.heap.page_allocator,
         .{
-            .name = "Unit tests",
-            .description = "Unit tests....",
+            .name = programName,
+            .banner = "Unit tests",
+            .description = "Runs the test groups built into this program.",
+            .positionals = &.{
+                .{ .name = "tag", .description = "Only run these group tags or test names (see --groups)", .optional = true, .repeat = true },
+            },
             .opts = &[_]Option{
                 Option{
                     .longName = "verbose",
@@ -710,6 +720,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo, process_args: std.process.A
                     .longName = "help",
                     .shortName = "h",
                     .description = "Prints out the help text.",
+                    .maxNumParams = 0,
                 },
             },
         },
@@ -717,7 +728,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo, process_args: std.process.A
     defer parser.deinit();
 
     var args = parser.parse(process_args) catch |err| {
-        std.debug.print("Error parsing args: {any}\n", .{err});
+        std.debug.print("Error parsing args: {any} {s}\n", .{ err, parser.failedArg orelse "" });
         return;
     };
     defer args.deinit();
@@ -747,6 +758,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo, process_args: std.process.A
         // using duped Printer struct comes from using vendored zargunaught lib
 
         var help = try zargs.help.HelpFormatter.init(&parser, printer, zargs.help.DefaultTheme, std.heap.page_allocator);
+        defer help.deinit();
         help.printHelpText() catch |err| {
             std.debug.print("Err: {any}\n", .{err});
         };
@@ -820,9 +832,7 @@ pub fn testzRunner(testsToRun: []const TestFuncInfo, process_args: std.process.A
         const captureOutput = args.hasOption("capture");
         const printAllOutput = args.hasOption("print-output");
 
-        const filters = (if (args.positional.items.len > 0) blk: {
-            break :blk args.positional.items;
-        } else null);
+        const filters = if (args.numPositional() > 0) args.positionals() else null;
 
         const passed = try runTests(testsToRun, .{
             .verbose = verbose,

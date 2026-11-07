@@ -2,7 +2,7 @@
 ![Testz Logo](images/testz.png)
 
 
-![Version Badge](https://img.shields.io/badge/Version-1.8.0-brightgreen)
+![Version Badge](https://img.shields.io/badge/Version-1.9.0-brightgreen)
 ![Zig Version Badge](https://img.shields.io/badge/Zig%20Version-0.17.0--dev.1857%2B3c46da14d-%23f7a41d?logo=zig)
 ![License Badge](https://img.shields.io/badge/License-MIT-blue)
 
@@ -192,11 +192,12 @@ When you use `testzRunner`, your test binary accepts the following flags:
 | `--verbose` | `-v` | off | Show each test name, pass/fail symbol, and elapsed time. |
 | `--stack_trace` | `-s` | **on** | Print stack traces with context lines on failure. Pass `--no-stack_trace` to disable. |
 | `--groups` | `-g` | — | List all available group names and their filter tags, then exit. Use this to discover what tags you can filter on. |
-| `--capture` | `-c` | off | Capture stdout and stderr written during each test at the OS level. Captured output from failing tests is shown in the failure section; captured output from passing tests is shown inline in verbose mode. |
+| `--capture` | `-c` | **on** | Capture stdout and stderr written during each test at the OS level. Captured output from failing tests is shown in the failure section; captured output from passing tests is shown inline in verbose mode. Pass `--no-capture` to disable. |
+| `--print-output` | `-p` | off | Print all captured output inline, not just for failing tests. |
 | `--color` | — | **on** | Force ANSI color output even when not writing to a TTY. |
 | `--help` | `-h` | — | Print usage text and exit. |
 
-Positional arguments are treated as filters.  Pass one or more group tags or exact test function names to run only the matching tests:
+Positional arguments are treated as filters.  Pass one or more group tags or exact test function names to run only the matching tests.  Flags can go before or after them:
 
 ```sh
 # run only the "auth" group
@@ -207,6 +208,9 @@ Positional arguments are treated as filters.  Pass one or more group tags or exa
 
 # combine multiple filters
 ./tests auth billing
+
+# flags anywhere
+./tests auth -v
 ```
 
 This makes it easy to set a breakpoint in your debugger and re-run a single test without recompiling.
