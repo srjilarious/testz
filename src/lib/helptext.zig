@@ -248,7 +248,9 @@ pub const HelpFormatter = struct
         }
 
         try self.printPositionalSection(conf.positionals, nameCol);
-        try self.printOptionSection("Global Options", self.args.options.data.items, nameCol);
+        // "Global" only means something next to commands' own options.
+        const optionsTitle = if (self.args.commands.data.items.len > 0) "Global Options" else "Options";
+        try self.printOptionSection(optionsTitle, self.args.options.data.items, nameCol);
 
         for(self.groupOrder.items) |groupName| {
             const group = self.commandGroups.get(groupName).?;

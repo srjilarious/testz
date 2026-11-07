@@ -93,6 +93,10 @@ pub const Option = struct {
     default: ?DefaultValue = null,
     // What help text calls this option's values, as in `--out <file>`.
     valueName: []const u8 = "value",
+    // When the user gives this option, positional argument counts aren't
+    // checked, so options like --help and --version work without the
+    // arguments a normal run requires.  A default doesn't count as given.
+    skipsPositionalChecks: bool = false,
 };
 
 /// A named positional argument, for help text and usage lines.
@@ -522,8 +526,11 @@ pub const ArgParser = struct {
         try state.availableOpts.data.appendSlice(self.alloc, self.options.data.items);
 
         try state.run();
+        // Decided before defaults are filled in: only an option the user
+        // actually gave can skip the checks.
+        const skipChecks = state.givenOptionSkipsChecks();
         try state.applyDefaults();
-        try state.checkPositionalCounts();
+        if (!skipChecks) try state.checkPositionalCounts();
 
         return parseResult;
     }
@@ -774,6 +781,13 @@ const ParseState = struct {
                 try result.positionalArgs.appendSlice(result.alloc, default.values());
             }
         }
+    }
+
+    fn givenOptionSkipsChecks(self: *const ParseState) bool {
+        for (self.availableOpts.data.items) |opt| {
+            if (opt.skipsPositionalChecks and self.result.hasOption(opt.longName)) return true;
+        }
+        return false;
     }
 
     fn checkPositionalCounts(self: *ParseState) ParseError!void {
